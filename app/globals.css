@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --font-inter: "Inter", sans-serif; --font-poppins: "Poppins", sans-serif; }
+body { font-family: var(--font-inter), Inter, system-ui, sans-serif; background: #F6F7F9; }
+h1, h2, h3, .font-heading { font-family: var(--font-poppins), Poppins, sans-serif; }
+input, select, textarea { outline: none; }
+input:focus, select:focus, textarea:focus { border-color: #0F766E !important; box-shadow: 0 0 0 3px rgba(15,118,110,.15); }
+
+/* Smooth scrolling for public-menu category chips anchor jumps. */
+html { scroll-behavior: smooth; }
+
+/* ------------------------------------------------------------------ */
+/* Mobile-first global fixes (most users are on Android phones).       */
+/* ------------------------------------------------------------------ */
+html, body { max-width: 100%; overflow-x: clip; }
+img, video { max-width: 100%; }
+iframe, embed, object { max-width: 100%; }
+pre { max-width: 100%; overflow-x: auto; }
+p, li, td, th { overflow-wrap: break-word; }
+
+/* Hide scrollbars on horizontal chip rails while keeping scroll. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@media (max-width: 767px) {
+  /* 16px input text stops Android/iOS auto-zoom on focus. */
+  input, select, textarea { font-size: 16px !important; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  select, textarea { min-height: 44px; }
+  input[type="file"] { min-height: 44px; padding-top: 10px; padding-bottom: 10px; }
+  main table {
+    display: block; width: 100%; max-width: 100%;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  main { min-width: 0; }
+}
+
+/* Subtle entrance animation for public menu cards. */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fadeUp .35s ease both; }
+
+/* ------------------------------------------------------------------ */
+/* Print: only the QR printable card is printed from /dashboard/qr.    */
+/* ------------------------------------------------------------------ */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area {
+    position: absolute; inset: 0 auto auto 0;
+    width: 100%; padding: 24px;
+  }
+  .no-print { display: none !important; }
+}
