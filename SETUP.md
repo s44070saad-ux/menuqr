@@ -1,0 +1,138 @@
+# MenuQR — Setup & Deployment Guide
+
+Exact steps, in order. Everything uses free tiers. Budget ~20 minutes.
+Do **not** skip Step 2 — without the database schema nothing can save data.
+
+---
+
+## Step 1 — Create the Supabase project
+
+1. Go to https://supabase.com → sign in → **New project**.
+2. Name it e.g. `menuqr`, choose a strong database password (save it in your
+   password manager), pick the closest region, create (free plan).
+3. Wait until the project finishes provisioning.
+
+## Step 2 — Run the database schema
+
+1. In the Supabase project: **SQL Editor → New query**.
+2. Open `supabase/schema.sql` from this repo, copy the **entire** file,
+   paste it in, press **Run**. You should see “Success. No rows returned”.
+   The file is safe to re-run if you ever need to.
+3. This creates all tables, RLS policies, triggers, the public
+   `menu-images` storage bucket, and seeds the 4 subscription plans.
+4. Verify: **Storage** should show a bucket named `menu-images` (public).
+   If it is missing for any reason, create it manually: Storage → New bucket →
+   name `menu-images`, **Public bucket ON** — then re-run the storage policy
+   section of `schema.sql` (or simply re-run the whole file).
+
+## Step 3 — Auth settings (email confirmation)
+
+- Default Supabase behaviour asks new users to confirm their email before
+  first login. MenuQR handles **both** settings correctly:
+  the DB trigger creates the profile at signup, the app-side insert works
+  with or without a session (see `profiles_insert_signup` in schema.sql).
+- For the smoothest testing, you may turn confirmation OFF:
+  **Authentication → Sign In / Providers → Email → “Confirm email” OFF → Save.**
+  Turn it back ON for real public signups if you prefer verified emails.
+- In **Authentication → URL Configuration**, set **Site URL** to your deployed
+  site URL (Step 6) and add it under **Redirect URLs** — needed for the
+  confirmation/login email links to land on the right domain.
+
+## Step 4 — Get your API keys
+
+**Project Settings → API.** You need exactly two public values:
+
+- **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+- **anon / Publishable key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  (new projects show a “Publishable” key `sb_publishable_…`; older ones show
+  the `anon` JWT — either is the correct public key)
+
+⚠️ **Never** use the `service_role` / Secret key in this app or in any
+`NEXT_PUBLIC_*` variable. It exists in that settings page — leave it there.
+
+## Step 5 — Push the code to GitHub
+
+From this folder (or upload via the GitHub web UI):
+
+```bash
+git init
+git add .
+git commit -m "MenuQR SaaS MVP"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/menuqr.git
+git push -u origin main
+```
+
+(Do not commit `.env.local` — it is gitignored.)
+
+## Step 6 — Deploy on Vercel
+
+1. https://vercel.com → **Add New → Project** → import your GitHub repo.
+2. Framework preset: **Next.js** (auto-detected). Leave build settings default.
+3. **Environment Variables** — add all three (Production + Preview + Development):
+   - `NEXT_PUBLIC_SUPABASE_URL` = your Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = your anon/publishable key
+   - `NEXT_PUBLIC_SITE_URL` = your Vercel URL, e.g. `https://menuqr-xyz.vercel.app` (no trailing slash)
+4. **Deploy.** Wait for “Ready”.
+5. Go back to Supabase **Authentication → URL Configuration** and set the
+   Site URL / Redirect URLs to this Vercel URL (Step 3).
+6. If you change env vars later, **redeploy** (Deployments → ⋯ → Redeploy) —
+   `NEXT_PUBLIC_*` values are baked in at build time.
+
+## Step 7 — Make yourself Super Admin
+
+1. Open your deployed site → **Register** with your own email → log in.
+2. Supabase → **SQL Editor** → run (replace with your email):
+
+```sql
+alter table public.profiles disable trigger trg_protect_profile_role;
+update public.profiles set role = 'super_admin' where email = 'YOUR_EMAIL@example.com';
+alter table public.profiles enable trigger trg_protect_profile_role;
+```
+
+   (The trigger normally blocks role changes from app users so nobody can
+   promote themselves; the SQL Editor runs as the database owner, and the
+   disable/enable pair makes the one-time promotion explicit and safe.)
+3. Log in again — the dashboard sidebar shows **Super Admin panel**, and
+   `/admin` opens the platform panel.
+
+## Step 8 — Test checklist (Phase 5)
+
+Run through every item on the live site before calling it done:
+
+- [ ] Landing page loads; Register creates an account; Login/Logout work.
+- [ ] Dashboard redirects to `/login` when signed out.
+- [ ] Create the restaurant profile; slug auto-fills; public link works.
+- [ ] Upload a logo (Storage) — and/or paste an image URL — both display.
+- [ ] Add 2 categories; reorder them with ↑ ↓; order matches the public menu.
+- [ ] Add menu items with photo, price and a discount price; toggle one
+      unavailable (shows greyed on the public menu); mark one featured
+      (appears in the Featured section).
+- [ ] Free-plan limit: the 16th item is blocked with a clear message.
+- [ ] Public menu `/menu/[slug]` opens **signed out** (test in a private/
+      incognito window): search works, category chips scroll, WhatsApp
+      button appears if a number is set, theme matches your setting.
+- [ ] Open the public menu a few times and tap some dishes → dashboard
+      Overview + Analytics show the scans and popular items.
+- [ ] QR page: QR renders; PNG and SVG download; “Print table card” prints
+      only the card; scanning the printed/downloaded QR opens the menu.
+- [ ] Change a price in the dashboard → refresh the public menu → new price
+      shows, same QR still works.
+- [ ] Data isolation: register a **second** account — it must see an empty
+      dashboard and must not see/edit the first restaurant anywhere.
+- [ ] Super Admin: `/admin` lists restaurants, suspend hides the public menu,
+      activate restores it, changing a plan updates the item limit.
+- [ ] Mobile: check dashboard + public menu on a real Android phone —
+      bottom tab bar, no sideways scrolling, forms easy to tap.
+
+## Troubleshooting
+
+- **“Supabase not connected” box** → env vars missing or not redeployed.
+- **Registration works but no profile** → schema.sql was not run (or run in a
+  different project). Re-run it in the correct project.
+- **Image upload fails** → `menu-images` bucket missing or private. Re-run
+  schema.sql Step 2, confirm the bucket is **public**.
+- **Public menu says “not found”** → restaurant is unpublished or suspended,
+  or the slug in the link differs from the saved slug.
+- **Confirmation email link goes to localhost** → fix Supabase URL
+  Configuration (Step 3/6).
