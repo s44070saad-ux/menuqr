@@ -53,6 +53,7 @@ const STEPS = [
 const COMPARE: { label: string; velora: string; qlinko: string; win?: boolean }[] = [
   { label: "Setup / “installation” fee", velora: "PKR 0 — self-serve", qlinko: "PKR 28,000 one-time", win: true },
   { label: "Item variations & add-ons", velora: "Yes — sizes, extras, priced options", qlinko: "Not available", win: true },
+  { label: "EU allergen & dietary labels", velora: "Yes — all 14 allergens, kcal, guest filters", qlinko: "Not available", win: true },
   { label: "Your logo inside the QR code", velora: "Yes", qlinko: "No", win: true },
   { label: "Menu opens without a phone-number gate", velora: "Yes — food first", qlinko: "No — phone number first", win: true },
   { label: "Analytics", velora: "Real scans & orders from your restaurant", qlinko: "Dashboard demo figures", win: true },
