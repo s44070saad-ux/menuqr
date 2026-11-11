@@ -78,6 +78,7 @@ create table if not exists public.restaurants (
   whatsapp text,
   opening_hours text,
   currency text not null default 'PKR',
+  trial_plan_slug text,
   default_language text not null default 'en',
   theme text not null default 'light' check (theme in ('light','dark')),
   accent_color text not null default '#0F766E',
@@ -304,7 +305,8 @@ create trigger trg_handle_new_user after insert on auth.users
 create or replace function public.handle_new_restaurant() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
-  v_plan_id uuid;
+  v_slug     text := coalesce(nullif(new.trial_plan_slug, ''), 'pro');
+  v_plan_id  uuid;
   v_is_trial boolean := false;
 begin
   insert into public.restaurant_members (restaurant_id, user_id, member_role)
@@ -318,14 +320,22 @@ begin
   insert into public.qr_codes (restaurant_id, label)
   values (new.id, 'Main QR');
 
-  -- 3-day free Pro trial for every new restaurant (falls back to Free
-  -- only if the Pro plan row somehow does not exist). restaurant_plan_slug
-  -- returns 'free' once a trialing subscription's ends_at has passed.
-  select id into v_plan_id from public.subscription_plans where slug = 'pro' limit 1;
-  if v_plan_id is not null then
-    v_is_trial := true;
-  else
+  -- 3-day free trial of the plan the owner picked at setup
+  -- (trial_plan_slug: starter / pro / business; default pro; 'free'
+  -- starts on Free with no trial). restaurant_plan_slug returns 'free'
+  -- once a trialing subscription's ends_at has passed.
+  if v_slug not in ('starter', 'pro', 'business', 'free') then
+    v_slug := 'pro';
+  end if;
+  select id into v_plan_id from public.subscription_plans where slug = v_slug limit 1;
+  if v_plan_id is null then
     select id into v_plan_id from public.subscription_plans where slug = 'free' limit 1;
+  end if;
+  if v_plan_id is not null then
+    v_is_trial := exists (
+      select 1 from public.subscription_plans p
+      where p.id = v_plan_id and p.slug <> 'free'
+    );
   end if;
   if v_plan_id is not null then
     insert into public.subscriptions (restaurant_id, plan_id, status, starts_at, ends_at)
