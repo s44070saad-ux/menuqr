@@ -53,3 +53,14 @@ p, li, td, th { overflow-wrap: break-word; }
   }
   .no-print { display: none !important; }
 }
+
+/* Phase 1.6: order ticket/receipt printing (80mm thermal friendly). */
+@media screen {
+  .ticket-print-area { position: fixed; left: -9999px; top: 0; width: 80mm; }
+}
+@media print {
+  .ticket-print-area, .ticket-print-area * { visibility: visible; }
+  .ticket-print-area {
+    position: fixed; left: 0; top: 0; width: 80mm; padding: 4mm;
+  }
+}
