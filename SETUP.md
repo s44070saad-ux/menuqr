@@ -20,6 +20,15 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
    The file is safe to re-run if you ever need to.
 3. This creates all tables, RLS policies, triggers, the public
    `menu-images` storage bucket, and seeds the 4 subscription plans.
+5. **Then run the ordering + analytics migration the same way:**
+   open `supabase/migration-ordering.sql`, copy the entire file, paste it
+   into a new SQL query and press **Run**. It adds customer ordering for
+   Pro/Business (orders tables, `place_customer_order` /
+   `get_customer_order` RPCs, per-table QR codes), the
+   `restaurant_settings.enable_ordering` toggle, and the analytics fix
+   (`menu_scans.source` QR-vs-link, table number, visitor id). Safe to re-run.
+   On the already-live project this migration is the ONLY SQL needed —
+   schema.sql does not need to be re-run.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
