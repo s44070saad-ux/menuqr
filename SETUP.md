@@ -48,6 +48,12 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
    (status `trialing`, `ends_at` = now + 3 days) instead of Free.
    Expiry is automatic: `restaurant_plan_slug()` returns `free` once
    the trial ends. Existing restaurants are not affected.
+9. **Then run the trial-plans migration the same way:**
+   `supabase/migration-trial-plans.sql` adds `restaurants.trial_plan_slug`
+   and lets the owner pick ANY paid plan to trial at restaurant setup
+   (Starter / Pro / Business; Pro default; explicit Free = no trial).
+   The setup form writes the column; the homepage plan CTAs carry it
+   through registration (`/register?plan=pro`).
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
