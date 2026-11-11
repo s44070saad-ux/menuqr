@@ -27,6 +27,8 @@ export default function OrdersPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [orderingOn, setOrderingOn] = useState<boolean | null>(null);
   const [savingToggle, setSavingToggle] = useState(false);
+  const [charges, setCharges] = useState<{ tax: string; service: string; min: string }>({ tax: "0", service: "0", min: "0" });
+  const [savingCharges, setSavingCharges] = useState(false);
   const seenIds = useRef<Set<string> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -72,8 +74,14 @@ export default function OrdersPage() {
     if (!supabase || !restaurant) return;
     (async () => {
       const { data } = await supabase.from("restaurant_settings")
-        .select("enable_ordering").eq("restaurant_id", restaurant.id).single();
-      setOrderingOn(Boolean((data as { enable_ordering?: boolean } | null)?.enable_ordering ?? true));
+        .select("enable_ordering, tax_percent, service_percent, min_order_amount").eq("restaurant_id", restaurant.id).single();
+      const d = data as { enable_ordering?: boolean; tax_percent?: number; service_percent?: number; min_order_amount?: number } | null;
+      setOrderingOn(Boolean(d?.enable_ordering ?? true));
+      setCharges({
+        tax: String(Number(d?.tax_percent ?? 0)),
+        service: String(Number(d?.service_percent ?? 0)),
+        min: String(Number(d?.min_order_amount ?? 0)),
+      });
     })();
   }, [restaurant]);
 
@@ -86,6 +94,20 @@ export default function OrdersPage() {
     if (err) setError(err.message);
     else { setOrderingOn(next); setSuccess(next ? "Ordering is ON — customers can order from your menu." : "Ordering is OFF — customers can browse your menu but cannot order."); }
     setSavingToggle(false);
+  }
+
+  async function saveCharges() {
+    if (!supabase || !restaurant || savingCharges) return;
+    const tax = parseFloat(charges.tax), service = parseFloat(charges.service), min = parseFloat(charges.min);
+    if ([tax, service].some((v) => Number.isNaN(v) || v < 0 || v > 100)) { setError("Tax and service charge must be percentages between 0 and 100."); return; }
+    if (Number.isNaN(min) || min < 0) { setError("Minimum order must be 0 or more."); return; }
+    setSavingCharges(true); setError(null); setSuccess(null);
+    const { error: err } = await supabase.from("restaurant_settings")
+      .update({ tax_percent: tax, service_percent: service, min_order_amount: min })
+      .eq("restaurant_id", restaurant.id);
+    if (err) setError(err.message);
+    else setSuccess("Charges saved — new orders will include them and show the breakdown to customers before they order.");
+    setSavingCharges(false);
   }
 
   function beep() {
@@ -170,6 +192,38 @@ export default function OrdersPage() {
             </button>
             <button type="button" onClick={() => load()} className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
               <RefreshCw size={15} /> Refresh
+            </button>
+          </Card>
+
+          {/* Charges (Phase 1.4) */}
+          <Card>
+            <p className="font-heading text-sm font-semibold text-ink">Tax, service charge & minimum order</p>
+            <p className="mt-0.5 text-xs leading-snug text-slate-500">
+              Added on top of the items subtotal and shown to the customer in the cart before they order. Leave at 0 to switch off. Totals are always calculated by the system — never typed by hand.
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="ch-tax">Tax %</label>
+                <input id="ch-tax" type="number" min="0" max="100" step="0.1" value={charges.tax}
+                  onChange={(e) => setCharges((c) => ({ ...c, tax: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="ch-svc">Service %</label>
+                <input id="ch-svc" type="number" min="0" max="100" step="0.1" value={charges.service}
+                  onChange={(e) => setCharges((c) => ({ ...c, service: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="ch-min">Minimum order ({restaurant.currency})</label>
+                <input id="ch-min" type="number" min="0" step="1" value={charges.min}
+                  onChange={(e) => setCharges((c) => ({ ...c, min: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" />
+              </div>
+            </div>
+            <button type="button" onClick={saveCharges} disabled={savingCharges}
+              className="mt-3 inline-flex min-h-[42px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              {savingCharges ? "Saving…" : "Save charges"}
             </button>
           </Card>
 
