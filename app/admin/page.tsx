@@ -8,14 +8,14 @@ import {
 } from "lucide-react";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, inputCls, labelCls, btnPrimary, btnGhost } from "@/components/ui";
 import { supabase, isSupabaseConfigured, NotConfiguredState } from "@/lib/adminHelpers";
-import { formatPrice, startOfTodayISO } from "@/lib/utils";
+import { formatPrice, startOfMonthISO, startOfTodayISO } from "@/lib/utils";
 import type { Payment, PaymentMethod, Profile, Restaurant, Subscription, SubscriptionPlan } from "@/lib/types";
 
 interface SubRow extends Subscription { plan?: SubscriptionPlan | null }
 interface PaymentRow extends Payment { planName?: string }
 
-type Tab = "restaurants" | "subscriptions" | "users" | "payments" | "plans";
-type SubFilter = "all" | "free" | "starter" | "pro" | "business" | "expiring" | "expired";
+type Tab = "overview" | "restaurants" | "subscriptions" | "users" | "payments" | "plans";
+type SubFilter = "all" | "free" | "starter" | "pro" | "business" | "trialing" | "expiring" | "expired";
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "jazzcash", label: "JazzCash" },
@@ -42,6 +42,17 @@ function fmtDate(iso?: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
+function waLink(raw?: string | null, text?: string): string | null {
+  if (!raw) return null;
+  let d = raw.replace(/\D/g, "");
+  if (!d) return null;
+  if (d.startsWith("0")) d = "92" + d.slice(1);
+  return `https://wa.me/${d}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+}
+function shortMoney(n: number): string {
+  if (n >= 1000) return `PKR ${Math.round(n / 100) / 10}k`;
+  return `PKR ${n}`;
+}
 
 /**
  * Super Admin panel v2. Access requires profiles.role = 'super_admin' —
@@ -64,6 +75,7 @@ export default function AdminPage() {
   const [subs, setSubs] = useState<SubRow[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [payStats, setPayStats] = useState<{ amount: number; created_at: string; restaurant_id: string }[]>([]);
   const [totalScans, setTotalScans] = useState(0);
   const [ordersToday, setOrdersToday] = useState(0);
   const [itemCounts, setItemCounts] = useState<Map<string, number>>(new Map());
@@ -72,13 +84,13 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("restaurants");
+  const [tab, setTab] = useState<Tab>("overview");
   const [search, setSearch] = useState("");
   const [subFilter, setSubFilter] = useState<SubFilter>("all");
 
   async function loadAll() {
     if (!supabase) return;
-    const [rRes, sRes, pRes, scanRes, profRes, payRes, itemsRes, scansRes, ordRes] = await Promise.all([
+    const [rRes, sRes, pRes, scanRes, profRes, payRes, itemsRes, scansRes, ordRes, payStatsRes] = await Promise.all([
       supabase.from("restaurants").select("*").order("created_at", { ascending: false }),
       supabase.from("subscriptions").select("*, plan:subscription_plans(*)").order("created_at", { ascending: false }),
       supabase.from("subscription_plans").select("*").order("display_order", { ascending: true }),
@@ -88,6 +100,7 @@ export default function AdminPage() {
       supabase.from("menu_items").select("restaurant_id").limit(20000),
       supabase.from("menu_scans").select("restaurant_id").limit(20000),
       supabase.from("orders").select("id", { count: "exact", head: true }).gte("created_at", startOfTodayISO()),
+      supabase.from("payments").select("amount, created_at, restaurant_id").limit(5000),
     ]);
     if (rRes.error) setError(rRes.error.message);
     const rests = (rRes.data as Restaurant[]) ?? [];
@@ -112,6 +125,7 @@ export default function AdminPage() {
     };
     setItemCounts(countBy(itemsRes.data as { restaurant_id: string }[]));
     setVisitCounts(countBy(scansRes.data as { restaurant_id: string }[]));
+    setPayStats((payStatsRes.data as { amount: number; created_at: string; restaurant_id: string }[]) ?? []);
     setLoadingData(false);
   }
 
@@ -138,16 +152,73 @@ export default function AdminPage() {
   const subByRestaurant = useMemo(() => new Map(subs.map((s) => [s.restaurant_id, s])), [subs]);
 
   const stats = useMemo(() => {
-    const paid = subs.filter((s) => (s.plan?.slug ?? "free") !== "free" && (s.status === "active" || s.status === "trialing") && !isExpiredSub(s));
-    const mrr = paid.reduce((n, s) => n + Number(s.plan?.price_monthly ?? 0), 0);
+    // HONEST MONEY RULE: a plan only counts as revenue when a confirmed
+    // payment exists in the payments table for that restaurant. Free
+    // trials and plan assignments without a payment NEVER count as
+    // money — trials are leads, not revenue.
+    const paidRestaurantIds = new Set(payStats.map((p) => p.restaurant_id));
+    const isPaidActive = (s: SubRow) => (s.plan?.slug ?? "free") !== "free"
+      && s.status === "active" && !isExpiredSub(s) && paidRestaurantIds.has(s.restaurant_id);
+    const paidActive = subs.filter(isPaidActive);
+    const monthStart = startOfMonthISO();
+    const collectedTotal = payStats.reduce((n, p) => n + Number(p.amount ?? 0), 0);
+    const collectedMonth = payStats
+      .filter((p) => p.created_at >= monthStart)
+      .reduce((n, p) => n + Number(p.amount ?? 0), 0);
     return {
-      paidCount: paid.length,
-      proCount: subs.filter((s) => ["pro", "business"].includes(s.plan?.slug ?? "") && !isExpiredSub(s) && (s.status === "active" || s.status === "trialing")).length,
+      paidCount: paidActive.length,
+      proCount: paidActive.filter((s) => ["pro", "business"].includes(s.plan?.slug ?? "")).length,
+      trialCount: subs.filter((s) => s.status === "trialing" && !isExpiredSub(s)).length,
       expiring: subs.filter(isExpiringSoon).length,
       expired: subs.filter(isExpiredSub).length,
-      mrr,
+      collectedTotal,
+      collectedMonth,
     };
-  }, [subs]);
+  }, [subs, payStats]);
+
+  const overview = useMemo(() => {
+    const attention = subs
+      .filter((s) => (s.plan?.slug ?? "free") !== "free"
+        && (isExpiredSub(s) || isExpiringSoon(s) || (s.status === "trialing" && (daysLeft(s) ?? 99) <= 1)))
+      .sort((a, b) => new Date(a.ends_at ?? 0).getTime() - new Date(b.ends_at ?? 0).getTime())
+      .slice(0, 8);
+    // Revenue by month — CONFIRMED PAYMENTS ONLY, never plan prices.
+    const months: { label: string; total: number; count: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); d.setMonth(d.getMonth() - i);
+      const next = new Date(d); next.setMonth(next.getMonth() + 1);
+      const rows = payStats.filter((p) => {
+        const t = new Date(p.created_at).getTime();
+        return t >= d.getTime() && t < next.getTime();
+      });
+      months.push({
+        label: d.toLocaleDateString("en-GB", { month: "short" }),
+        total: rows.reduce((n, p) => n + Number(p.amount ?? 0), 0),
+        count: rows.length,
+      });
+    }
+    const paidIds = new Set(payStats.map((p) => p.restaurant_id));
+    const planMix = plans.map((p) => ({
+      plan: p,
+      paid: subs.filter((s) => s.plan_id === p.id && s.status === "active" && !isExpiredSub(s) && paidIds.has(s.restaurant_id)).length,
+      trial: subs.filter((s) => s.plan_id === p.id && s.status === "trialing" && !isExpiredSub(s)).length,
+      freeCount: p.slug === "free" ? subs.filter((s) => s.plan_id === p.id && !isExpiredSub(s)).length : 0,
+    }));
+    type FeedItem = { at: string; icon: "payment" | "restaurant"; text: string; sub: string };
+    const feed: FeedItem[] = [
+      ...payments.slice(0, 20).map((p) => ({
+        at: p.created_at, icon: "payment" as const,
+        text: `${formatPrice(Number(p.amount ?? 0))} confirmed — ${restaurantById.get(p.restaurant_id)?.name ?? "Restaurant"}`,
+        sub: `${p.planName ?? "Plan"} · ${p.method}`,
+      })),
+      ...restaurants.slice(0, 20).map((r) => ({
+        at: r.created_at, icon: "restaurant" as const,
+        text: `New restaurant — ${r.name}`,
+        sub: `/menu/${r.slug}`,
+      })),
+    ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 8);
+    return { attention, months, planMix, feed };
+  }, [subs, payStats, payments, restaurants, plans, restaurantById]);
 
   async function toggleSuspend(r: Restaurant) {
     if (!supabase) return;
@@ -238,6 +309,7 @@ export default function AdminPage() {
     if (!matches(r?.name ?? "", `${o?.email ?? ""} ${o?.full_name ?? ""}`)) return false;
     switch (subFilter) {
       case "all": return true;
+      case "trialing": return s.status === "trialing" && !isExpiredSub(s);
       case "expiring": return isExpiringSoon(s);
       case "expired": return isExpiredSub(s);
       default: return (s.plan?.slug ?? "free") === subFilter && !isExpiredSub(s);
@@ -246,6 +318,7 @@ export default function AdminPage() {
   const visibleUsers = profiles.filter((p) => matches(p.full_name ?? "", p.email));
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
+    { key: "overview", label: "Overview" },
     { key: "restaurants", label: "Restaurants", count: restaurants.length },
     { key: "subscriptions", label: "Subscriptions", count: subs.length },
     { key: "users", label: "Users", count: profiles.length },
@@ -277,12 +350,12 @@ export default function AdminPage() {
           <div className="mt-4 space-y-5">
             {/* Stats */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <StatCard icon={Store} label="Restaurants" value={restaurants.length} />
-              <StatCard icon={Users} label="Users (owners)" value={profiles.length} />
-              <StatCard icon={CreditCard} label="Paid active" value={stats.paidCount} sub={`${stats.proCount} Pro/Business`} />
-              <StatCard icon={Banknote} label="Est. MRR" value={formatPrice(stats.mrr)} sub="from active paid plans" />
-              <StatCard icon={CalendarClock} label="Expiring ≤ 7 days" value={stats.expiring} sub={stats.expired ? `${stats.expired} already expired` : "none expired"} warn={stats.expiring > 0 || stats.expired > 0} />
-              <StatCard icon={ScanLine} label="Menu visits" value={totalScans} sub={`${ordersToday} orders today`} />
+              <StatCard icon={Store} label="Restaurants" value={restaurants.length} tone="bg-brand-light/60 text-brand-dark" />
+              <StatCard icon={Users} label="Users (owners)" value={profiles.length} tone="bg-violet-100 text-violet-600" />
+              <StatCard icon={CreditCard} label="Paid active" value={stats.paidCount} sub={`${stats.proCount} Pro/Business · ${stats.trialCount} on trial (not counted)`} tone="bg-emerald-100 text-emerald-600" />
+              <StatCard icon={Banknote} label="Collected this month" value={formatPrice(stats.collectedMonth)} sub={`${formatPrice(stats.collectedTotal)} all time · confirmed payments only`} tone="bg-amber-100 text-amber-600" />
+              <StatCard icon={CalendarClock} label="Expiring ≤ 7 days" value={stats.expiring} sub={stats.expired ? `${stats.expired} already expired` : "none expired"} warn={stats.expiring > 0 || stats.expired > 0} tone="bg-orange-100 text-orange-600" />
+              <StatCard icon={ScanLine} label="Menu visits" value={totalScans} sub={`${ordersToday} orders today`} tone="bg-sky-100 text-sky-600" />
             </div>
 
             {/* Tabs + search */}
@@ -301,6 +374,125 @@ export default function AdminPage() {
                   className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm" />
               </div>
             </div>
+
+            {/* ---------------- Overview ---------------- */}
+            {tab === "overview" && (
+              <section className="space-y-4">
+                {overview.attention.length > 0 && (
+                  <Card className="!border-amber-200 !bg-amber-50/70">
+                    <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink">
+                      <CalendarClock size={18} className="text-amber-600" /> Needs attention ({overview.attention.length})
+                    </h2>
+                    <div className="mt-3 space-y-2">
+                      {overview.attention.map((s) => {
+                        const r = restaurantById.get(s.restaurant_id);
+                        const dl = daysLeft(s);
+                        const expired = isExpiredSub(s);
+                        const wa = waLink(r?.whatsapp || r?.phone,
+                          `Assalam o Alaikum, this is Team Velora. Your ${s.plan?.name ?? ""} ${s.status === "trialing" ? "free trial" : "subscription"} for ${r?.name ?? "your restaurant"} ${expired ? "has expired" : "is ending soon"}. Message us to keep your ordering and premium features running.`);
+                        return (
+                          <div key={s.id} className="flex flex-wrap items-center gap-2.5 rounded-xl bg-white px-3.5 py-2.5 shadow-card">
+                            <div className="min-w-0 flex-1 basis-48">
+                              <p className="truncate text-sm font-semibold text-ink">{r?.name ?? "Restaurant"} <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{s.plan?.name ?? "Free"}</span></p>
+                              <p className={`text-xs font-medium ${expired ? "text-red-600" : "text-amber-700"}`}>
+                                {s.status === "trialing"
+                                  ? expired ? "Trial expired" : dl === 0 ? "Trial ends today" : `Trial · ${dl}d left`
+                                  : expired ? `Expired ${fmtDate(s.ends_at)}` : `Expires ${fmtDate(s.ends_at)} · ${dl}d left`}
+                              </p>
+                            </div>
+                            {wa && (
+                              <a href={wa} target="_blank" rel="noreferrer" className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-emerald-600">
+                                <MessageCircle size={15} /> WhatsApp
+                              </a>
+                            )}
+                            <button type="button" onClick={() => { setTab("subscriptions"); setSubFilter(expired ? "expired" : s.status === "trialing" ? "trialing" : "expiring"); }}
+                              className="inline-flex min-h-[38px] items-center rounded-lg bg-ink px-3 py-1.5 text-[13px] font-medium text-white">
+                              Manage
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Card>
+                    <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink"><Banknote size={18} className="text-brand" /> Revenue — confirmed payments only</h2>
+                    {overview.months.every((m) => m.total === 0) ? (
+                      <p className="mt-3 text-sm leading-relaxed text-slate-500">
+                        No confirmed payments yet. This chart counts <strong>only</strong> money recorded in the
+                        Payments tab — free trials and plan assignments never appear here as revenue.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-5 flex h-36 items-end gap-2">
+                          {overview.months.map((m) => {
+                            const max = Math.max(...overview.months.map((x) => x.total), 1);
+                            return (
+                              <div key={m.label} className="flex flex-1 flex-col items-center gap-1.5" title={`${m.label}: ${formatPrice(m.total)} (${m.count} payments)`}>
+                                <span className="text-[10px] font-semibold text-slate-500">{m.total > 0 ? shortMoney(m.total) : ""}</span>
+                                <div className="w-full rounded-t-lg bg-gradient-to-t from-brand-dark to-brand" style={{ height: `${Math.max(3, (m.total / max) * 100)}%` }} />
+                                <span className="text-[11px] font-medium text-slate-500">{m.label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-3 text-xs text-slate-400">Last 6 months · {payStats.length} confirmed payment{payStats.length === 1 ? "" : "s"} all time · {formatPrice(stats.collectedTotal)} collected.</p>
+                      </>
+                    )}
+                  </Card>
+
+                  <Card>
+                    <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink"><CreditCard size={18} className="text-brand" /> Plan mix</h2>
+                    <div className="mt-4 space-y-3.5">
+                      {overview.planMix.map(({ plan: p, paid, trial, freeCount }) => {
+                        const total = Math.max(1, ...overview.planMix.map((x) => x.paid + x.trial + x.freeCount));
+                        const dot = p.slug === "business" ? "bg-amber-500" : p.slug === "pro" ? "bg-brand" : p.slug === "starter" ? "bg-sky-500" : "bg-slate-400";
+                        const n = p.slug === "free" ? freeCount : paid + trial;
+                        return (
+                          <div key={p.id}>
+                            <div className="flex items-baseline gap-2 text-sm">
+                              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
+                              <span className="font-medium text-ink">{p.name}</span>
+                              <span className="ml-auto text-slate-500">
+                                {p.slug === "free" ? `${freeCount} restaurant${freeCount === 1 ? "" : "s"}` : `${paid} paid${trial ? ` · ${trial} on trial` : ""}`}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                              <div className={`h-full rounded-full ${dot}`} style={{ width: `${(n / total) * 100}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-4 text-xs text-slate-400">“Paid” requires a confirmed payment on record — trials are shown separately, never as revenue.</p>
+                  </Card>
+                </div>
+
+                <Card>
+                  <h2 className="font-heading text-base font-semibold text-ink">Recent activity</h2>
+                  {overview.feed.length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-500">Nothing yet — new restaurants and confirmed payments will appear here.</p>
+                  ) : (
+                    <ul className="mt-2 divide-y divide-slate-100">
+                      {overview.feed.map((f, i) => (
+                        <li key={i} className="flex items-center gap-3 py-2.5 text-sm">
+                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${f.icon === "payment" ? "bg-emerald-100 text-emerald-600" : "bg-brand-light/60 text-brand-dark"}`}>
+                            {f.icon === "payment" ? <Banknote size={16} /> : <Store size={16} />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium text-ink">{f.text}</span>
+                            <span className="block truncate text-xs text-slate-400">{f.sub}</span>
+                          </span>
+                          <span className="shrink-0 text-xs text-slate-400">{fmtDate(f.at)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              </section>
+            )}
 
             {/* ---------------- Restaurants ---------------- */}
             {tab === "restaurants" && (
@@ -330,7 +522,7 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-ink">{s?.plan?.name ?? "Free"}{s && isExpiredSub(s) && <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">EXPIRED</span>}</p>
+                              <p className="text-sm font-semibold text-ink">{s?.plan?.name ?? "Free"}{s && isExpiredSub(s) && <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">EXPIRED</span>}{s && s.status === "trialing" && !isExpiredSub(s) && <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">FREE TRIAL{dl != null ? ` · ${dl}d left` : ""}</span>}</p>
                               <p className="text-xs text-slate-500">
                                 {s?.plan?.slug === "free" || !s ? "no due date" : s.ends_at ? `due ${fmtDate(s.ends_at)}${dl != null ? ` (${dl <= 0 ? "overdue" : `${dl}d left`})` : ""}` : "no due date set"}
                               </p>
@@ -356,7 +548,7 @@ export default function AdminPage() {
                 <div className="no-scrollbar flex gap-2 overflow-x-auto">
                   {([
                     ["all", "All"], ["free", "Free"], ["starter", "Starter"], ["pro", "Pro"],
-                    ["business", "Business"], ["expiring", "Expiring soon"], ["expired", "Expired"],
+                    ["business", "Business"], ["trialing", "On trial"], ["expiring", "Expiring soon"], ["expired", "Expired"],
                   ] as [SubFilter, string][]).map(([f, label]) => (
                     <button key={f} type="button" onClick={() => setSubFilter(f)}
                       className={`min-h-[38px] shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-medium ${subFilter === f ? "bg-brand text-white" : "bg-white text-slate-600 shadow-card"}`}>
@@ -464,13 +656,13 @@ export default function AdminPage() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub, warn }: { icon: typeof Store; label: string; value: React.ReactNode; sub?: string; warn?: boolean }) {
+function StatCard({ icon: Icon, label, value, sub, warn, tone = "bg-brand-light/60 text-brand-dark" }: { icon: typeof Store; label: string; value: React.ReactNode; sub?: string; warn?: boolean; tone?: string }) {
   return (
-    <Card className={`!p-4 text-center ${warn ? "ring-2 ring-amber-300" : ""}`}>
-      <Icon size={19} className="mx-auto text-brand" />
-      <p className="mt-1.5 truncate font-heading text-lg font-bold text-ink sm:text-xl">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-      {sub && <p className="mt-0.5 truncate text-[11px] text-slate-400">{sub}</p>}
+    <Card className={`!p-4 ${warn ? "ring-2 ring-amber-300" : ""}`}>
+      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tone}`}><Icon size={18} /></span>
+      <p className="mt-2.5 truncate font-heading text-lg font-bold text-ink sm:text-xl">{value}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      {sub && <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{sub}</p>}
     </Card>
   );
 }
