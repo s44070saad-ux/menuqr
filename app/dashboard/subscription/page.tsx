@@ -52,12 +52,12 @@ export default function SubscriptionPage() {
           <ErrorBox message={error} />
           {isTrial && (
             <div className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-900">
-              <p className="font-heading text-base font-bold">🎉 You're on a free Pro trial — {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left</p>
+              <p className="font-heading text-base font-bold">🎉 You're on a free {currentPlan?.name ?? "Pro"} trial — {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left</p>
               <p className="mt-1 text-sm leading-relaxed">
-                Every Pro feature is unlocked right now: ordering, kitchen display, variations & add-ons and advanced analytics.
+                Every {currentPlan?.name ?? "Pro"} feature is unlocked right now.
                 Your trial ends {new Date(subscription!.ends_at!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} —
                 after that your restaurant continues on the Free plan (your menu and QR keep working) until you upgrade.
-                Pay for Pro before the trial ends and your paid time stacks on top of the remaining trial days.
+                Pay for {currentPlan?.name ?? "Pro"} before the trial ends and your paid time stacks on top of the remaining trial days.
               </p>
             </div>
           )}
