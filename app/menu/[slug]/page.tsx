@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, MapPin, Phone, Clock, MessageCircle, Star, Moon, Sun, UtensilsCrossed,
   Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList, Check, Type, Flame, RotateCcw,
+  TicketPercent, Gift, Stamp,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/utils";
@@ -61,6 +62,11 @@ const STR: Record<Lang, Record<string, string>> = {
     fbPlaceholder: "Tell the restaurant what you thought — only they will see this", fbSend: "Send feedback",
     fbThanks: "Thank you! Your feedback was sent to the restaurant.", fbError: "Could not send feedback. Please try again.",
     happyHour: "Happy hour", availWindow: "Available {from} – {to}",
+    couponPh: "Coupon code (optional)", giftPh: "Gift card code (optional)", applyBtn: "Apply",
+    discountApplied: "Discounts applied", discountNone: "That code doesn't apply to this order.",
+    emailOpt: "Email (optional — receipt & offers)", emailConsent: "Email me offers from this restaurant",
+    loyaltyTitle: "Your loyalty stamps", loyaltyReward: "You have a reward waiting! Show this screen at the counter on your next visit.",
+    loyaltyProgress: "stamps — {left} more for a reward",
     reorderNote: "These items need your choices on the menu:",
     stepReceived: "Received", stepPreparing: "Preparing", stepReady: "Ready",
     readyBy: "Ready by about", readyNow: "Should be ready now — please check at the counter.",
@@ -101,6 +107,11 @@ const STR: Record<Lang, Record<string, string>> = {
     fbPlaceholder: "ریستوراں کو بتائیں کھانا کیسا لگا — یہ صرف وہی دیکھیں گے", fbSend: "فیڈبیک بھیجیں",
     fbThanks: "شکریہ! آپ کا فیڈبیک ریسٹورنٹ کو بھیج دیا گیا ہے۔", fbError: "فیڈبیک نہیں بھیجا جا سکا۔ دوبارہ کوشش کریں۔",
     happyHour: "ہیپی آور", availWindow: "دستیاب: {from} – {to}",
+    couponPh: "کوپن کوڈ (اختیاری)", giftPh: "گفٹ کارڈ کوڈ (اختیاری)", applyBtn: "لگائیں",
+    discountApplied: "ڈسکاؤنٹ لگ گیا", discountNone: "یہ کوڈ اس آرڈر پر لاگو نہیں ہوتا۔",
+    emailOpt: "ای میل (اختیاری — رسید اور آفرز)", emailConsent: "اس ریسٹورنٹ کی آفرز ای میل کریں",
+    loyaltyTitle: "آپ کے لائلٹی سٹیمپ", loyaltyReward: "آپ کا انعام منتظر ہے! اگلی بار کاؤنٹر پر یہ اسکرین دکھائیں۔",
+    loyaltyProgress: "سٹیمپ — انعام کے لیے مزید {left} درکار",
     reorderNote: "ان اشیاء کے لیے مینیو پر انتخاب درکار ہے:",
     stepReceived: "موصول ہو گیا", stepPreparing: "تیار ہو رہا ہے", stepReady: "تیار ہے",
     readyBy: "تقریباً اس وقت تک تیار ہوگا", readyNow: "اب تیار ہونا چاہیے — براہ کرم کاؤنٹر پر معلوم کریں۔",
@@ -188,6 +199,15 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [tableNumber, setTableNumber] = useState(qrTable ?? "");
   const [custName, setCustName] = useState("");
   const [custPhone, setCustPhone] = useState("");
+  // Phase 3: email capture + coupon/gift card state.
+  const [custEmail, setCustEmail] = useState("");
+  const [emailConsent, setEmailConsent] = useState(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [giftInput, setGiftInput] = useState("");
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discount: number } | null>(null);
+  const [giftApplied, setGiftApplied] = useState<{ code: string; credit: number } | null>(null);
+  const [discountBusy, setDiscountBusy] = useState(false);
+  const [discountMsg, setDiscountMsg] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [placing, setPlacing] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -425,14 +445,19 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
 
   const cartCount = lines.reduce((n, l) => n + l.qty, 0);
   const cartTotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
-  // Phase 1.4 charges — a PREVIEW only; place_customer_order recomputes
-  // the same figures server-side and its totals are the real ones.
+  // Phase 1.4 charges + Phase 3 discounts — a PREVIEW only;
+  // place_customer_order recomputes the same figures server-side
+  // (coupon first, charges on the discounted subtotal, gift card last)
+  // and its totals are the real ones.
   const taxPct = Number(settings?.tax_percent ?? 0);
   const svcPct = Number(settings?.service_percent ?? 0);
   const minOrder = Number(settings?.min_order_amount ?? 0);
-  const taxAmt = Math.round(cartTotal * taxPct) / 100;
-  const svcAmt = Math.round(cartTotal * svcPct) / 100;
-  const grandTotal = cartTotal + taxAmt + svcAmt;
+  const couponDiscount = couponApplied ? Math.min(couponApplied.discount, cartTotal) : 0;
+  const discountedTotal = cartTotal - couponDiscount;
+  const taxAmt = Math.round(discountedTotal * taxPct) / 100;
+  const svcAmt = Math.round(discountedTotal * svcPct) / 100;
+  const giftCredit = giftApplied ? Math.min(giftApplied.credit, discountedTotal + taxAmt + svcAmt) : 0;
+  const grandTotal = Math.max(0, discountedTotal + taxAmt + svcAmt - giftCredit);
   const belowMin = minOrder > 0 && lines.length > 0 && cartTotal < minOrder;
   const minOrderText = t.minOrderMsg
     .replace("{min}", formatPrice(minOrder, restaurant?.currency ?? "PKR"))
@@ -551,6 +576,54 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // Phase 3: preview a coupon / gift card via the display-only RPC
+  // (one call per code; the RPC takes a single code + kind). The real
+  // validation runs again inside place_customer_order.
+  async function applyDiscounts() {
+    if (!supabase || !restaurant || discountBusy) return;
+    const cc = (couponApplied?.code ?? couponInput.trim().toUpperCase());
+    const gc = (giftApplied?.code ?? giftInput.trim().toUpperCase());
+    if (!cc && !gc) return;
+    setDiscountBusy(true);
+    setDiscountMsg(null);
+    try {
+      let newCoupon: { code: string; discount: number } | null = null;
+      let newGift: { code: string; credit: number } | null = null;
+      if (cc) {
+        const { data } = await supabase.rpc("preview_discount", {
+          p_restaurant_id: restaurant.id, p_code: cc, p_kind: "coupon",
+          p_subtotal: cartTotal, p_phone: custPhone.trim() || null,
+        });
+        const r = data as { ok?: boolean; discount?: number } | null;
+        if (r?.ok) newCoupon = { code: cc, discount: Number(r.discount ?? 0) };
+      }
+      if (gc) {
+        const { data } = await supabase.rpc("preview_discount", {
+          p_restaurant_id: restaurant.id, p_code: gc, p_kind: "gift_card",
+          p_subtotal: cartTotal, p_phone: custPhone.trim() || null,
+        });
+        const r = data as { ok?: boolean; balance?: number } | null;
+        if (r?.ok) {
+          // Gift credit preview mirrors the server: it pays against the
+          // discounted subtotal plus charges. The stored order figure
+          // from place_customer_order is the authoritative one.
+          const discEst = cartTotal - (newCoupon?.discount ?? 0);
+          const estTotal = discEst + Math.round(discEst * taxPct) / 100 + Math.round(discEst * svcPct) / 100;
+          newGift = { code: gc, credit: Math.min(Number(r.balance ?? 0), estTotal) };
+        }
+      }
+      setCouponApplied(newCoupon);
+      setGiftApplied(newGift);
+      setDiscountMsg(newCoupon || newGift ? t.discountApplied : t.discountNone);
+      if (newCoupon) setCouponInput("");
+      if (newGift) setGiftInput("");
+    } catch {
+      setDiscountMsg(t.discountNone);
+    } finally {
+      setDiscountBusy(false);
+    }
+  }
+
   async function placeOrder() {
     if (!supabase || !restaurant || placing) return;
     setOrderError(null);
@@ -571,6 +644,10 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         p_customer_phone: orderType === "takeaway" ? custPhone.trim() : (custPhone.trim() || null),
         p_note: note.trim() || null,
         p_qr_code_id: qrId,
+        p_coupon_code: couponApplied?.code ?? (couponInput.trim() ? couponInput.trim().toUpperCase() : null),
+        p_gift_card_code: giftApplied?.code ?? (giftInput.trim() ? giftInput.trim().toUpperCase() : null),
+        p_customer_email: orderType === "takeaway" && custEmail.includes("@") ? custEmail.trim() : null,
+        p_email_consent: emailConsent,
         p_items: lines.map((l) => ({
           menu_item_id: l.item.id, quantity: l.qty,
           option_ids: l.options.map((o) => o.id),
@@ -584,6 +661,9 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       setMyOrderCreds(creds);
       setLines([]);
       setNote("");
+      setCouponApplied(null);
+      setGiftApplied(null);
+      setDiscountMsg(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not place the order.";
       if (msg.includes("ORDERING_NOT_AVAILABLE")) setOrderError("Ordering is not available for this restaurant right now.");
@@ -592,6 +672,8 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       else if (msg.includes("INVALID_OPTION")) setOrderError("One of the chosen options is no longer available. Please review your cart and try again.");
       else if (msg.includes("TOO_MANY_ORDERS")) setOrderError("Too many orders in a short time. Please wait a few minutes or ask the staff for help.");
       else if (msg.includes("MIN_ORDER")) setOrderError(minOrderText);
+      else if (msg.includes("COUPON_")) { setCouponApplied(null); setOrderError("That coupon can't be used on this order (it may be expired, below its minimum, used up, or for first orders only). Remove it and try again."); }
+      else if (msg.includes("GIFT_CARD_")) { setGiftApplied(null); setOrderError("That gift card can't be used (unknown code or no balance left). Remove it and try again."); }
       else if (msg.includes("TABLE_REQUIRED")) setOrderError("Please enter your table number.");
       else if (msg.includes("PHONE_REQUIRED")) setOrderError("Please enter a valid phone number.");
       else if (msg.includes("NAME_REQUIRED")) setOrderError("Please enter your name.");
@@ -1059,11 +1141,29 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </li>
                       ))}
                     </ul>
-                    {(Number(myOrder.tax_amount ?? 0) > 0 || Number(myOrder.service_amount ?? 0) > 0) && myOrder.subtotal_amount != null && (
+                    {(Number(myOrder.tax_amount ?? 0) > 0 || Number(myOrder.service_amount ?? 0) > 0 || Number(myOrder.discount_amount ?? 0) > 0 || Number(myOrder.gift_card_amount ?? 0) > 0) && myOrder.subtotal_amount != null && (
                       <div className={`mt-3 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
                         <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(Number(myOrder.subtotal_amount), currency)}</span></div>
+                        {Number(myOrder.discount_amount ?? 0) > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Coupon {myOrder.coupon_code ?? ""}</span><span>−{formatPrice(Number(myOrder.discount_amount), currency)}</span></div>}
                         {Number(myOrder.tax_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tax}</span><span>{formatPrice(Number(myOrder.tax_amount), currency)}</span></div>}
                         {Number(myOrder.service_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.serviceCharge}</span><span>{formatPrice(Number(myOrder.service_amount), currency)}</span></div>}
+                        {Number(myOrder.gift_card_amount ?? 0) > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Gift card</span><span>−{formatPrice(Number(myOrder.gift_card_amount), currency)}</span></div>}
+                      </div>
+                    )}
+                    {myOrder.loyalty && (
+                      <div className={`mt-3 rounded-2xl border p-3.5 text-sm ${dark ? "border-neutral-800 bg-neutral-800/50" : "border-teal-100 bg-teal-50"}`} role="status">
+                        <p className="flex items-center gap-1.5 font-semibold"><Stamp size={15} style={{ color: accent }} /> {t.loyaltyTitle}</p>
+                        <div className="mt-2 flex gap-1.5" aria-hidden="true">
+                          {Array.from({ length: myOrder.loyalty.buy_x }).map((_, i) => (
+                            <span key={i} className={`h-2.5 flex-1 rounded-full ${i < (myOrder.loyalty!.reward_ready ? myOrder.loyalty!.buy_x : myOrder.loyalty!.cycle) ? "" : dark ? "bg-neutral-700" : "bg-teal-100"}`}
+                              style={i < (myOrder.loyalty!.reward_ready ? myOrder.loyalty!.buy_x : myOrder.loyalty!.cycle) ? { background: accent } : undefined} />
+                          ))}
+                        </div>
+                        <p className={`mt-2 text-[13px] ${dark ? "text-neutral-300" : "text-slate-600"}`}>
+                          {myOrder.loyalty.reward_ready
+                            ? t.loyaltyReward
+                            : `${myOrder.loyalty.cycle}/${myOrder.loyalty.buy_x} ${t.loyaltyProgress.replace("{left}", String(myOrder.loyalty.buy_x - myOrder.loyalty.cycle))}`}
+                        </p>
                       </div>
                     )}
                     <div className={`mt-3 flex items-center justify-between border-t pt-3 font-heading font-bold ${dark ? "border-neutral-800" : "border-slate-100"}`}>
@@ -1135,11 +1235,37 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </div>
                       </div>
                     )}
-                    {(taxAmt > 0 || svcAmt > 0) ? (
+                    {/* Phase 3: coupon + gift card (validated by the server
+                        again at order time; this is a live preview). */}
+                    <div className={`mt-4 space-y-2 border-t pt-3 ${dark ? "border-neutral-800" : "border-slate-100"}`}>
+                      <div className="flex gap-2">
+                        <span className="relative flex-1">
+                          <TicketPercent size={16} className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${rtl ? "right-3" : "left-3"} ${dark ? "text-neutral-500" : "text-slate-400"}`} />
+                          <input value={couponApplied ? couponApplied.code : couponInput} onChange={(e) => { setCouponInput(e.target.value); setCouponApplied(null); }}
+                            placeholder={t.couponPh} aria-label={t.couponPh}
+                            className={`w-full rounded-xl border py-2.5 text-[15px] uppercase ${rtl ? "pl-3 pr-9" : "pl-9 pr-3"} ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
+                        </span>
+                        <span className="relative flex-1">
+                          <Gift size={16} className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${rtl ? "right-3" : "left-3"} ${dark ? "text-neutral-500" : "text-slate-400"}`} />
+                          <input value={giftApplied ? giftApplied.code : giftInput} onChange={(e) => { setGiftInput(e.target.value); setGiftApplied(null); }}
+                            placeholder={t.giftPh} aria-label={t.giftPh}
+                            className={`w-full rounded-xl border py-2.5 text-[15px] uppercase ${rtl ? "pl-3 pr-9" : "pl-9 pr-3"} ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
+                        </span>
+                        <button type="button" onClick={applyDiscounts} disabled={discountBusy || (!couponInput.trim() && !giftInput.trim() && !couponApplied && !giftApplied)}
+                          className="min-h-[44px] shrink-0 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-50" style={{ background: accent }}>
+                          {discountBusy ? "…" : t.applyBtn}
+                        </button>
+                      </div>
+                      {discountMsg && <p className={`text-xs ${(couponApplied || giftApplied) ? "text-emerald-600" : dark ? "text-neutral-400" : "text-slate-500"}`}>{discountMsg}</p>}
+                    </div>
+
+                    {(taxAmt > 0 || svcAmt > 0 || couponDiscount > 0 || giftCredit > 0) ? (
                       <div className={`mt-4 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
                         <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(cartTotal, currency)}</span></div>
+                        {couponDiscount > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Coupon {couponApplied?.code}</span><span>−{formatPrice(couponDiscount, currency)}</span></div>}
                         {taxAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tax} ({taxPct}%)</span><span>{formatPrice(taxAmt, currency)}</span></div>}
                         {svcAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.serviceCharge} ({svcPct}%)</span><span>{formatPrice(svcAmt, currency)}</span></div>}
+                        {giftCredit > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Gift card {giftApplied?.code}</span><span>−{formatPrice(giftCredit, currency)}</span></div>}
                         <div className="flex items-center justify-between pt-1 font-heading text-base font-bold"><span>{t.total}</span><span>{formatPrice(grandTotal, currency)}</span></div>
                       </div>
                     ) : (
@@ -1177,6 +1303,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         <input id="ord-phone" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} inputMode="tel"
                           placeholder="03xx xxxxxxx" className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
                         <p className={`mt-1.5 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.phoneHint}</p>
+                        <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-email">{t.emailOpt}</label>
+                        <input id="ord-email" type="email" value={custEmail} onChange={(e) => setCustEmail(e.target.value)}
+                          placeholder="you@example.com" className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
+                        <label className={`mt-2 flex min-h-[36px] cursor-pointer items-center gap-2 text-[13px] ${dark ? "text-neutral-300" : "text-slate-600"}`}>
+                          <input type="checkbox" checked={emailConsent} onChange={(e) => setEmailConsent(e.target.checked)} className="h-4.5 w-4.5 shrink-0 accent-teal-700" style={{ width: 18, height: 18 }} />
+                          {t.emailConsent}
+                        </label>
                       </div>
                     )}
 
