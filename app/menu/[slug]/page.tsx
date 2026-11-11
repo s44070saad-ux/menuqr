@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, MapPin, Phone, Clock, MessageCircle, Star, Moon, Sun, UtensilsCrossed,
-  Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList, Check,
+  Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList, Check, Type,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/utils";
@@ -22,6 +22,10 @@ import { ALLERGENS, DIETARY, allergenLabel, dietaryLabel } from "@/lib/allergens
  *   prices incl. option deltas are recomputed server-side): cart lines
  *   may carry variations/add-ons chosen in the options sheet; status is
  *   polled via get_customer_order (order_id + secret token).
+ * - Privacy/GDPR: this page loads NO third-party trackers and sets NO
+ *   cookies; visit analytics are first-party rows counted from a
+ *   localStorage timestamp only. Accessibility: big-text toggle
+ *   (root font-size), aria labels/live regions, keyboard-operable cards.
  * - Menu themes (Starter+): classic / midnight / fresh / royal from
  *   restaurant_settings.menu_theme; Free restaurants always render
  *   classic. EN/Urdu chrome toggle; dish text stays owner-entered.
@@ -56,6 +60,7 @@ const STR: Record<Lang, Record<string, string>> = {
     completedMsg: "This order is complete. Thank you!",
     cancelledMsg: "The restaurant could not accept this order. Please speak to the staff or try again.",
     contains: "Contains", avoidAllergen: "Avoid allergen:", anyAllergen: "None — show all",
+    bigText: "Bigger text", privacyNote: "This menu uses no tracking cookies.",
     orderPlaced: "Order placed", menuNotFound: "Menu not found",
     notFoundMsg: "This restaurant menu is not published or the link is wrong. Please check the QR code and try again.",
     menuUnavailable: "Menu unavailable", unavailableMsg: "This menu service is not connected yet. Please check back shortly.",
@@ -86,6 +91,7 @@ const STR: Record<Lang, Record<string, string>> = {
     completedMsg: "یہ آرڈر مکمل ہو گیا ہے۔ شکریہ!",
     cancelledMsg: "ریسٹورنٹ یہ آرڈر قبول نہیں کر سکا۔ براہ کرم عملے سے بات کریں یا دوبارہ کوشش کریں۔",
     contains: "شامل ہے", avoidAllergen: "الرجین سے بچیں:", anyAllergen: "کوئی نہیں — سب دکھائیں",
+    bigText: "بڑا متن", privacyNote: "اس مینیو میں کوئی ٹریکنگ کوکیز استعمال نہیں ہوتیں۔",
     orderPlaced: "آرڈر ہو گیا", menuNotFound: "مینیو نہیں ملا",
     notFoundMsg: "یہ مینیو شائع نہیں ہے یا لنک غلط ہے۔ QR کوڈ چیک کر کے دوبارہ کوشش کریں۔",
     menuUnavailable: "مینیو دستیاب نہیں", unavailableMsg: "یہ سروس ابھی منسلک نہیں ہے۔ براہ کرم کچھ دیر بعد دیکھیں۔",
@@ -120,6 +126,18 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [darkPref, setDarkPref] = useState(false);
   const [lang, setLang] = useState<Lang>("en");
+  const [bigText, setBigText] = useState<boolean>(() =>
+    typeof window !== "undefined" && window.localStorage.getItem("velora_big_text") === "1");
+
+  // Accessibility: big-text mode scales every rem-based size on the page
+  // by raising the root font size (16px -> 18px), and remembers the
+  // guest's choice on this device. Reset on unmount so the rest of the
+  // app is unaffected.
+  useEffect(() => {
+    document.documentElement.style.fontSize = bigText ? "18px" : "";
+    try { window.localStorage.setItem("velora_big_text", bigText ? "1" : "0"); } catch { /* private mode */ }
+    return () => { document.documentElement.style.fontSize = ""; };
+  }, [bigText]);
   const scanRecorded = useRef(false);
   const viewedItems = useRef<Set<string>>(new Set());
   const isOwnerRef = useRef(false);
@@ -492,7 +510,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   ) : "";
 
   return (
-    <Shell dark={dark} rtl={rtl} bg={themeCfg.bg}>
+    <Shell dark={dark} rtl={rtl} bg={themeCfg.bg} note={t.privacyNote}>
       {/* Cover */}
       <div className="relative">
         {restaurant.cover_url ? (
@@ -513,6 +531,10 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
               {dark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
           )}
+          <button type="button" onClick={() => setBigText((b) => !b)} aria-label={t.bigText} aria-pressed={bigText}
+            className={`flex h-10 w-10 items-center justify-center rounded-full backdrop-blur ${bigText ? "bg-white text-slate-900" : "bg-black/35 text-white"}`}>
+            <Type size={18} />
+          </button>
         </div>
       </div>
 
@@ -565,7 +587,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         {showSearch && (
           <div className="relative mt-4">
             <Search size={18} className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${rtl ? "right-3.5" : "left-3.5"} ${dark ? "text-neutral-500" : "text-slate-400"}`} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.search}
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.search} aria-label={t.search} type="search"
               className={`w-full rounded-2xl border py-3 text-[15px] shadow-card ${rtl ? "pl-4 pr-11" : "pl-11 pr-4"} ${dark ? "border-neutral-800 bg-neutral-900 text-white placeholder:text-neutral-500" : "border-slate-200 bg-white placeholder:text-slate-400"}`} />
           </div>
         )}
@@ -774,7 +796,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                   <p className={`text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>{t.loadingStatus}</p>
                 ) : (
                   <div>
-                    <div className={`rounded-2xl p-4 text-center ${myOrder.status === "confirmed" ? "bg-emerald-50 text-emerald-900" : myOrder.status === "cancelled" ? "bg-red-50 text-red-800" : myOrder.status === "completed" ? "bg-slate-100 text-slate-800" : "bg-amber-50 text-amber-900"}`}>
+                    <div aria-live="polite" className={`rounded-2xl p-4 text-center ${myOrder.status === "confirmed" ? "bg-emerald-50 text-emerald-900" : myOrder.status === "cancelled" ? "bg-red-50 text-red-800" : myOrder.status === "completed" ? "bg-slate-100 text-slate-800" : "bg-amber-50 text-amber-900"}`}>
                       {myOrder.status === "pending" && <Clock3 size={30} className="mx-auto text-amber-500" />}
                       {myOrder.status === "confirmed" && <ChefHat size={30} className="mx-auto text-emerald-600" />}
                       {myOrder.status === "completed" && <CheckCircle2 size={30} className="mx-auto text-slate-500" />}
@@ -791,11 +813,11 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       {myOrder.items.map((oi, i) => (
                         <li key={i}>
                           <div className="flex items-center gap-2">
-                            <span className="flex-1">{oi.item_name} <span className="text-slate-400">× {oi.quantity}</span></span>
+                            <span className="flex-1">{oi.item_name} <span className="text-slate-500">× {oi.quantity}</span></span>
                             <span className="font-medium">{formatPrice(Number(oi.subtotal), currency)}</span>
                           </div>
                           {oi.options && oi.options.length > 0 && (
-                            <p className={`mt-0.5 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>
+                            <p className={`mt-0.5 text-xs ${dark ? "text-neutral-400" : "text-slate-500"}`}>
                               {oi.options.map((o) => `${o.group_name}: ${o.option_name}`).join(" · ")}
                             </p>
                           )}
@@ -943,20 +965,23 @@ function QtyStepper({ qty, accent, dark, onQty }: { qty: number; accent: string;
   );
 }
 
-function Shell({ dark, rtl, bg, children }: { dark: boolean; rtl?: boolean; bg?: string; children: React.ReactNode }) {
+function Shell({ dark, rtl, bg, note, children }: { dark: boolean; rtl?: boolean; bg?: string; note?: string; children: React.ReactNode }) {
   return (
     <div dir={rtl ? "rtl" : "ltr"}
       className={`min-h-screen font-body ${dark ? "bg-neutral-950 text-white" : "text-ink"}`}
       style={!dark ? { backgroundColor: bg || "#F6F7F9" } : { backgroundColor: bg || undefined }}>
       {children}
-      <p className={`pb-6 text-center text-[11px] ${dark ? "text-neutral-600" : "text-slate-400"}`}>Powered by Velora</p>
+      <p className={`pb-6 text-center text-[11px] ${dark ? "text-neutral-400" : "text-slate-500"}`}>
+        Powered by Velora
+        {note && <span className="mt-0.5 block">{note}</span>}
+      </p>
     </div>
   );
 }
 
 function Chip({ label, active, accent, dark, onClick }: { label: string; active: boolean; accent: string; dark: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick}
+    <button type="button" onClick={onClick} aria-pressed={active}
       className={`min-h-[40px] shrink-0 rounded-full px-4 py-2 text-sm font-medium transition ${active ? "text-white" : dark ? "bg-neutral-900 text-neutral-300" : "bg-white text-slate-600 shadow-card"}`}
       style={active ? { background: accent } : undefined}>
       {label}
@@ -991,7 +1016,7 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
         </div>
       )}
       {(item.allergens?.length ?? 0) > 0 && (
-        <p className={`text-[11px] leading-snug ${dark ? "text-neutral-500" : "text-slate-400"}`}>
+        <p className={`text-[11px] leading-snug ${dark ? "text-neutral-400" : "text-slate-500"}`}>
           {t.contains}: {(item.allergens ?? []).map(allergenLabel).join(", ")}
         </p>
       )}
@@ -1022,6 +1047,8 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
   if (featured) {
     return (
       <div onClick={onTap} role="button" tabIndex={0}
+        aria-label={`${item.name}, ${formatPrice(Number(hasDiscount ? item.discount_price : item.price), currency)}${item.is_available ? "" : `, ${t.unavailableShort}`}`}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}
         className={`fade-up cursor-pointer overflow-hidden rounded-2xl text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
         {item.image_url
           ? // eslint-disable-next-line @next/next/no-img-element
@@ -1041,6 +1068,8 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
 
   return (
     <div onClick={onTap} role="button" tabIndex={0}
+      aria-label={`${item.name}, ${formatPrice(Number(hasDiscount ? item.discount_price : item.price), currency)}${item.is_available ? "" : `, ${t.unavailable}`}`}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}
       className={`fade-up flex w-full cursor-pointer gap-3 rounded-2xl p-3 text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
       <div className="min-w-0 flex-1 py-0.5">
         <p className="flex items-center gap-1.5 text-[15px] font-semibold leading-snug">
