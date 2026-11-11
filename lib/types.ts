@@ -70,6 +70,8 @@ export interface RestaurantSettings {
   min_order_amount?: number;
   /** Phase 1.5: typical minutes from confirmation to ready (ETA). */
   prep_time_minutes?: number;
+  /** Phase 2.3: owner-set Google review link shown after completed orders. */
+  google_review_url?: string | null;
   qr_color: string;
   card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
@@ -133,6 +135,8 @@ export interface MenuItem {
   /** Dietary flag keys: vegan | vegetarian | gluten_free | halal. */
   dietary?: string[];
   calories?: number | null;
+  /** Phase 2.1: owner-picked "pairs well with" item ids for upselling. */
+  suggested_item_ids?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -179,7 +183,18 @@ export interface OrderItem {
   unit_price: number;
   quantity: number;
   subtotal: number;
+  via_upsell?: boolean;
   options_snapshot?: ChosenOption[];
+  created_at: string;
+}
+
+export interface Feedback {
+  id: string;
+  restaurant_id: string;
+  order_id: string | null;
+  customer_name: string | null;
+  rating: number | null;
+  message: string;
   created_at: string;
 }
 
