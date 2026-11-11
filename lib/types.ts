@@ -122,6 +122,11 @@ export interface MenuItem {
   is_available: boolean;
   is_featured: boolean;
   display_order: number;
+  /** EU-14 allergen keys (lib/allergens.ts). Optional: rows predate the column. */
+  allergens?: string[];
+  /** Dietary flag keys: vegan | vegetarian | gluten_free | halal. */
+  dietary?: string[];
+  calories?: number | null;
   created_at: string;
   updated_at: string;
 }
