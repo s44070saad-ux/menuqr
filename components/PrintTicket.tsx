@@ -19,7 +19,8 @@ export default function PrintTicket({
   const when = new Date(order.created_at);
   const shortId = order.id.slice(0, 8).toUpperCase();
   const hasCharges = order.subtotal_amount != null &&
-    (Number(order.tax_amount ?? 0) > 0 || Number(order.service_amount ?? 0) > 0);
+    (Number(order.tax_amount ?? 0) > 0 || Number(order.service_amount ?? 0) > 0 ||
+     Number(order.discount_amount ?? 0) > 0 || Number(order.gift_card_amount ?? 0) > 0);
   return (
     <div className="ticket-print-area" style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", color: "#000" }}>
       <div style={{ textAlign: "center", borderBottom: "2px solid #000", paddingBottom: 8 }}>
@@ -70,6 +71,11 @@ export default function PrintTicket({
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span>Subtotal</span><span>{formatPrice(Number(order.subtotal_amount), currency)}</span>
               </div>
+              {Number(order.discount_amount ?? 0) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Coupon {order.coupon_code ?? ""}</span><span>-{formatPrice(Number(order.discount_amount), currency)}</span>
+                </div>
+              )}
               {Number(order.tax_amount ?? 0) > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span>Tax</span><span>{formatPrice(Number(order.tax_amount), currency)}</span>
@@ -78,6 +84,11 @@ export default function PrintTicket({
               {Number(order.service_amount ?? 0) > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span>Service</span><span>{formatPrice(Number(order.service_amount), currency)}</span>
+                </div>
+              )}
+              {Number(order.gift_card_amount ?? 0) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Gift card</span><span>-{formatPrice(Number(order.gift_card_amount), currency)}</span>
                 </div>
               )}
             </>
