@@ -166,7 +166,7 @@ export default function QrPage() {
                 <img src={pngUrl} alt={`QR code for ${restaurant.name}`} className="mx-auto mt-4 h-52 w-52" />
               )}
               <p className="mt-4 break-all text-xs text-slate-500">{plainUrl}</p>
-              <p className="mt-2 text-[11px] uppercase tracking-widest text-slate-400">Powered by MenuQR</p>
+              <p className="mt-2 text-[11px] uppercase tracking-widest text-slate-400">Powered by Velora</p>
             </div>
           </div>
 
