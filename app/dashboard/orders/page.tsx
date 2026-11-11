@@ -362,6 +362,12 @@ function OrderCard({ order: o, currency, busy, onStatus, onPrint }: {
         ))}
       </ul>
       {o.note && <p className="mt-2.5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">Note: {o.note}</p>}
+      {(Number(o.discount_amount ?? 0) > 0 || Number(o.gift_card_amount ?? 0) > 0) && (
+        <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-emerald-700">
+          {Number(o.discount_amount ?? 0) > 0 && <span>Coupon {o.coupon_code ?? ""}: −{formatPrice(Number(o.discount_amount), currency)}</span>}
+          {Number(o.gift_card_amount ?? 0) > 0 && <span>Gift card paid: {formatPrice(Number(o.gift_card_amount), currency)} (already covered — collect the rest)</span>}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
         <span className="font-heading text-base font-bold text-ink">{formatPrice(Number(o.total_amount), currency)}</span>
