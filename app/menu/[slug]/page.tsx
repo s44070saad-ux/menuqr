@@ -42,7 +42,8 @@ const STR: Record<Lang, Record<string, string>> = {
     viewCart: "View cart & order", item: "item", items: "items",
     yourCart: "Your cart", yourOrder: "Your order",
     cartEmpty: "Your cart is empty. Tap + on any dish to add it.",
-    total: "Total", dineIn: "Dine-in (at table)", takeaway: "Takeaway",
+    total: "Total", subtotal: "Subtotal", tax: "Tax", serviceCharge: "Service charge", minOrderMsg: "Minimum order {min} — add {more} more to order.",
+    dineIn: "Dine-in (at table)", takeaway: "Takeaway",
     tableNumber: "Table number", yourName: "Your name", yourNameOpt: "Your name (optional)",
     namePh: "Name", phone: "Phone number", phoneHint: "The restaurant uses this only to contact you about this order.",
     note: "Note (optional)", notePh: "e.g. Less spicy, extra raita…",
@@ -73,7 +74,8 @@ const STR: Record<Lang, Record<string, string>> = {
     viewCart: "کارٹ دیکھیں اور آرڈر کریں", item: "آئٹم", items: "آئٹمز",
     yourCart: "آپ کا کارٹ", yourOrder: "آپ کا آرڈر",
     cartEmpty: "آپ کا کارٹ خالی ہے۔ کسی ڈش پر + دبائیں۔",
-    total: "کل رقم", dineIn: "یہیں کھائیں (ٹیبل)", takeaway: "ٹیک اوے",
+    total: "کل رقم", subtotal: "ذیلی رقم", tax: "ٹیکس", serviceCharge: "سروس چارج", minOrderMsg: "کم از کم آرڈر {min} ہے — آرڈر کے لیے مزید {more} شامل کریں۔",
+    dineIn: "یہیں کھائیں (ٹیبل)", takeaway: "ٹیک اوے",
     tableNumber: "ٹیبل نمبر", yourName: "آپ کا نام", yourNameOpt: "آپ کا نام (اختیاری)",
     namePh: "نام", phone: "فون نمبر", phoneHint: "ریسٹورنٹ یہ نمبر صرف اس آرڈر کے لیے استعمال کرے گا۔",
     note: "نوٹ (اختیاری)", notePh: "مثلاً کم مرچ، اضافی رائتہ…",
@@ -341,6 +343,18 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
 
   const cartCount = lines.reduce((n, l) => n + l.qty, 0);
   const cartTotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
+  // Phase 1.4 charges — a PREVIEW only; place_customer_order recomputes
+  // the same figures server-side and its totals are the real ones.
+  const taxPct = Number(settings?.tax_percent ?? 0);
+  const svcPct = Number(settings?.service_percent ?? 0);
+  const minOrder = Number(settings?.min_order_amount ?? 0);
+  const taxAmt = Math.round(cartTotal * taxPct) / 100;
+  const svcAmt = Math.round(cartTotal * svcPct) / 100;
+  const grandTotal = cartTotal + taxAmt + svcAmt;
+  const belowMin = minOrder > 0 && lines.length > 0 && cartTotal < minOrder;
+  const minOrderText = t.minOrderMsg
+    .replace("{min}", formatPrice(minOrder, restaurant?.currency ?? "PKR"))
+    .replace("{more}", formatPrice(minOrder - cartTotal, restaurant?.currency ?? "PKR"));
   const itemQty = (itemId: string) => lines.filter((l) => l.item.id === itemId).reduce((n, l) => n + l.qty, 0);
 
   function addLine(item: MenuItem, options: CartOption[], qty = 1) {
@@ -415,6 +429,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     if (!supabase || !restaurant || placing) return;
     setOrderError(null);
     if (lines.length === 0) { setOrderError("Your cart is empty."); return; }
+    if (belowMin) { setOrderError(minOrderText); return; }
     if (orderType === "dine_in" && !tableNumber.trim()) { setOrderError("Please enter your table number."); return; }
     if (orderType === "takeaway") {
       if (!custName.trim()) { setOrderError("Please enter your name for the takeaway order."); return; }
@@ -449,6 +464,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       else if (msg.includes("OPTION_REQUIRED")) setOrderError("One of your dishes needs a required choice (like a size). Please reopen it and choose.");
       else if (msg.includes("INVALID_OPTION")) setOrderError("One of the chosen options is no longer available. Please review your cart and try again.");
       else if (msg.includes("TOO_MANY_ORDERS")) setOrderError("Too many orders in a short time. Please wait a few minutes or ask the staff for help.");
+      else if (msg.includes("MIN_ORDER")) setOrderError(minOrderText);
       else if (msg.includes("TABLE_REQUIRED")) setOrderError("Please enter your table number.");
       else if (msg.includes("PHONE_REQUIRED")) setOrderError("Please enter a valid phone number.");
       else if (msg.includes("NAME_REQUIRED")) setOrderError("Please enter your name.");
@@ -824,6 +840,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </li>
                       ))}
                     </ul>
+                    {(Number(myOrder.tax_amount ?? 0) > 0 || Number(myOrder.service_amount ?? 0) > 0) && myOrder.subtotal_amount != null && (
+                      <div className={`mt-3 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
+                        <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(Number(myOrder.subtotal_amount), currency)}</span></div>
+                        {Number(myOrder.tax_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tax}</span><span>{formatPrice(Number(myOrder.tax_amount), currency)}</span></div>}
+                        {Number(myOrder.service_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.serviceCharge}</span><span>{formatPrice(Number(myOrder.service_amount), currency)}</span></div>}
+                      </div>
+                    )}
                     <div className={`mt-3 flex items-center justify-between border-t pt-3 font-heading font-bold ${dark ? "border-neutral-800" : "border-slate-100"}`}>
                       <span>{t.total} {myOrder.order_type === "dine_in" && myOrder.table_number ? `· ${t.table} ${myOrder.table_number}` : myOrder.order_type === "takeaway" ? `· ${t.takeaway}` : ""}</span>
                       <span>{formatPrice(Number(myOrder.total_amount), currency)}</span>
@@ -867,9 +890,18 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </li>
                       ))}
                     </ul>
-                    <div className={`mt-4 flex items-center justify-between border-t pt-3 font-heading font-bold ${dark ? "border-neutral-800" : "border-slate-100"}`}>
-                      <span>{t.total}</span><span>{formatPrice(cartTotal, currency)}</span>
-                    </div>
+                    {(taxAmt > 0 || svcAmt > 0) ? (
+                      <div className={`mt-4 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
+                        <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(cartTotal, currency)}</span></div>
+                        {taxAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tax} ({taxPct}%)</span><span>{formatPrice(taxAmt, currency)}</span></div>}
+                        {svcAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.serviceCharge} ({svcPct}%)</span><span>{formatPrice(svcAmt, currency)}</span></div>}
+                        <div className="flex items-center justify-between pt-1 font-heading text-base font-bold"><span>{t.total}</span><span>{formatPrice(grandTotal, currency)}</span></div>
+                      </div>
+                    ) : (
+                      <div className={`mt-4 flex items-center justify-between border-t pt-3 font-heading font-bold ${dark ? "border-neutral-800" : "border-slate-100"}`}>
+                        <span>{t.total}</span><span>{formatPrice(cartTotal, currency)}</span>
+                      </div>
+                    )}
 
                     {/* Order type */}
                     <div className={`mt-4 grid grid-cols-2 gap-2 rounded-2xl p-1.5 ${dark ? "bg-neutral-800" : "bg-slate-100"}`}>
@@ -908,12 +940,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       placeholder={t.notePh}
                       className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
 
+                    {belowMin && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">{minOrderText}</p>}
                     {orderError && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{orderError}</p>}
 
-                    <button type="button" onClick={placeOrder} disabled={placing}
+                    <button type="button" onClick={placeOrder} disabled={placing || belowMin}
                       className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold text-white disabled:opacity-50"
                       style={{ background: accent }}>
-                      <ShoppingBag size={19} /> {placing ? t.placing : `${t.placeOrder} · ${formatPrice(cartTotal, currency)}`}
+                      <ShoppingBag size={19} /> {placing ? t.placing : `${t.placeOrder} · ${formatPrice(grandTotal, currency)}`}
                     </button>
                     <p className={`mt-2.5 text-center text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payNote}</p>
 
