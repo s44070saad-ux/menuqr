@@ -19,8 +19,9 @@ interface ItemForm {
   name: string; description: string; price: string; discount_price: string;
   category_id: string; image_url: string; is_available: boolean; is_featured: boolean;
   calories: string; allergens: string[]; dietary: string[];
+  suggested: string[];
 }
-const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: "", category_id: "", image_url: "", is_available: true, is_featured: false, calories: "", allergens: [], dietary: [] };
+const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: "", category_id: "", image_url: "", is_available: true, is_featured: false, calories: "", allergens: [], dietary: [], suggested: [] };
 
 export default function MenuItemsPage() {
   const { loading, userId, restaurant, subscription } = useOwner();
@@ -63,6 +64,8 @@ export default function MenuItemsPage() {
   }), [items, search, filterCat]);
 
   const catName = (id: string | null) => categories.find((c) => c.id === id)?.name ?? "Uncategorised";
+  const toggleSuggested = (id: string) =>
+    setForm((f) => ({ ...f, suggested: f.suggested.includes(id) ? f.suggested.filter((x) => x !== id) : (f.suggested.length >= 3 ? f.suggested : [...f.suggested, id]) }));
   const toggleArr = (field: "allergens" | "dietary", key: string) =>
     setForm((f) => ({ ...f, [field]: f[field].includes(key) ? f[field].filter((x) => x !== key) : [...f[field], key] }));
   const set = (k: keyof ItemForm, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
@@ -178,6 +181,7 @@ export default function MenuItemsPage() {
       image_url: form.image_url.trim() || null,
       is_available: form.is_available, is_featured: form.is_featured,
       calories, allergens: form.allergens, dietary: form.dietary,
+      suggested_item_ids: form.suggested,
     };
     const { error: err } = editing
       ? await supabase.from("menu_items").update(payload).eq("id", editing.id)
@@ -227,6 +231,7 @@ export default function MenuItemsPage() {
       is_available: item.is_available, is_featured: item.is_featured,
       calories: item.calories == null ? "" : String(item.calories),
       allergens: item.allergens ?? [], dietary: item.dietary ?? [],
+      suggested: item.suggested_item_ids ?? [],
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -426,6 +431,19 @@ export default function MenuItemsPage() {
                       </button>
                     ))}
                   </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3.5">
+                <p className="text-sm font-semibold text-ink">Pairs well with (upselling)</p>
+                <p className="mt-0.5 text-xs text-slate-500">Pick up to 3 items to suggest when a guest views or orders this dish — they appear in the dish options and in the cart with one-tap add. Suggestions show on Pro and Business plans.</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {items.filter((x) => x.id !== editing?.id).map((x) => (
+                    <button key={x.id} type="button" onClick={() => toggleSuggested(x.id)} aria-pressed={form.suggested.includes(x.id)}
+                      className={`min-h-[36px] rounded-full px-3 py-1.5 text-[13px] font-medium ${form.suggested.includes(x.id) ? "bg-brand text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                      {x.name}
+                    </button>
+                  ))}
+                  {items.length <= 1 && <span className="text-xs text-slate-400">Add more items first — suggestions need other dishes to point to.</span>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
