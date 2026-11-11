@@ -64,6 +64,10 @@ export interface RestaurantSettings {
   enable_ordering: boolean;
   footer_text: string | null;
   menu_theme: MenuTheme | string;
+  /** Phase 1.4 charges (percent of items subtotal; 0 = off). */
+  tax_percent?: number;
+  service_percent?: number;
+  min_order_amount?: number;
   qr_color: string;
   card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
@@ -156,6 +160,9 @@ export interface Order {
   note: string | null;
   status: OrderStatus;
   total_amount: number;
+  subtotal_amount?: number | null;
+  tax_amount?: number;
+  service_amount?: number;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
@@ -200,6 +207,9 @@ export interface CustomerOrder {
   order_type: OrderType;
   table_number: string | null;
   total_amount: number;
+  subtotal_amount?: number | null;
+  tax_amount?: number;
+  service_amount?: number;
   created_at: string;
   updated_at: string;
   items: { item_name: string; unit_price: number; quantity: number; subtotal: number; options?: ChosenOption[] }[];
