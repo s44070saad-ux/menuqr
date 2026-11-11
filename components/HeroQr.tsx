@@ -4,13 +4,13 @@ import QRCode from "qrcode";
 import { SITE_URL } from "@/lib/supabaseClient";
 
 /**
- * A REAL, scannable QR code for the live Dubai Foods demo menu,
+ * A REAL, scannable QR code for the live Spice Route demo menu,
  * generated in the browser. Used on the homepage hero and the
  * live-demo section — visitors can scan it with their own phone.
  */
 export default function HeroQr({ size = 112 }: { size?: number }) {
   const [src, setSrc] = useState("");
-  const url = `${SITE_URL || "https://veloraqr.vercel.app"}/menu/dubai-foods?src=qr`;
+  const url = `${SITE_URL || "https://veloraqr.vercel.app"}/menu/spice-route?src=qr`;
 
   useEffect(() => {
     let cancelled = false;
@@ -22,5 +22,5 @@ export default function HeroQr({ size = 112 }: { size?: number }) {
 
   if (!src) return <div style={{ width: size, height: size }} className="rounded-xl bg-slate-100" aria-hidden="true" />;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="QR code for the live Dubai Foods demo menu" style={{ width: size, height: size }} className="rounded-xl" />;
+  return <img src={src} alt="QR code for the live Spice Route demo menu" style={{ width: size, height: size }} className="rounded-xl" />;
 }
