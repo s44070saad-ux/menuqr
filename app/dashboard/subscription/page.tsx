@@ -34,6 +34,13 @@ export default function SubscriptionPage() {
   }, [restaurant]);
 
   const currentPlan = subscription?.plan ?? plans.find((p) => p.slug === "free") ?? null;
+  const isTrial = subscription?.status === "trialing" && Boolean(subscription?.ends_at);
+  const trialDaysLeft = isTrial
+    ? Math.max(0, Math.ceil((new Date(subscription!.ends_at!).getTime() - Date.now()) / 86400000))
+    : 0;
+  const statusLabel = subscription?.status === "trialing" ? "free trial"
+    : subscription?.status === "expired" ? "expired — on Free plan limits"
+    : (subscription?.status ?? "active");
 
   return (
     <DashboardShell title="Subscription">
@@ -43,6 +50,17 @@ export default function SubscriptionPage() {
       ) : (
         <div className="space-y-5">
           <ErrorBox message={error} />
+          {isTrial && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-900">
+              <p className="font-heading text-base font-bold">🎉 You're on a free Pro trial — {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left</p>
+              <p className="mt-1 text-sm leading-relaxed">
+                Every Pro feature is unlocked right now: ordering, kitchen display, variations & add-ons and advanced analytics.
+                Your trial ends {new Date(subscription!.ends_at!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} —
+                after that your restaurant continues on the Free plan (your menu and QR keep working) until you upgrade.
+                Pay for Pro before the trial ends and your paid time stacks on top of the remaining trial days.
+              </p>
+            </div>
+          )}
           <Card>
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-light/60 text-brand-dark"><CreditCard size={22} /></span>
@@ -52,7 +70,8 @@ export default function SubscriptionPage() {
                   <span className="ml-2 align-middle"><BadgeCheck size={18} className="inline text-brand" /></span>
                 </p>
                 <p className="text-sm text-slate-500">
-                  Status: <span className="font-medium capitalize text-ink">{subscription?.status ?? "active"}</span>
+                  Status: <span className="font-medium capitalize text-ink">{statusLabel}</span>
+                  {isTrial && subscription?.ends_at && <> · trial ends {new Date(subscription.ends_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</>}
                   {subscription?.starts_at && <> · since {new Date(subscription.starts_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</>}
                 </p>
               </div>
@@ -89,7 +108,9 @@ export default function SubscriptionPage() {
                 <div key={p.id} className={`flex flex-col rounded-2xl bg-white p-5 shadow-card ${isCurrent ? "ring-2 ring-brand" : ""}`}>
                   <div className="flex items-center justify-between">
                     <h3 className="font-heading text-base font-semibold text-ink">{p.name}</h3>
-                    {isCurrent && <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-white">CURRENT</span>}
+                    {isCurrent
+                      ? <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-white">CURRENT</span>
+                      : p.slug === "pro" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">MOST POPULAR</span>}
                   </div>
                   <p className="mt-2">
                     <span className="font-heading text-2xl font-bold text-ink">{p.currency} {Number(p.price_monthly).toLocaleString("en-US")}</span>
