@@ -107,7 +107,7 @@ export default function RestaurantProfilePage() {
     <DashboardShell title="Restaurant Profile">
       {welcome && !restaurant && (
         <div className="mb-4 rounded-xl border border-brand/30 bg-brand-light/40 px-4 py-3 text-sm text-brand-dark">
-          Welcome to MenuQR! Step 1: set up your restaurant below. Your menu page and permanent QR code are created automatically.
+          Welcome to Velora! Step 1: set up your restaurant below. Your menu page and permanent QR code are created automatically.
         </div>
       )}
       {loading ? <Loading label="Loading restaurant profile…" /> : (
