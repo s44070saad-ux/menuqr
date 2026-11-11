@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Store, FolderTree, UtensilsCrossed, QrCode, BarChart3,
-  CreditCard, Menu, X, MoreHorizontal, Home, LogOut, Loader2, ShieldCheck, ClipboardList, ChefHat,
+  CreditCard, Menu, X, MoreHorizontal, Home, LogOut, Loader2, ShieldCheck, ClipboardList, ChefHat, MessageSquareHeart,
   Sparkles,
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
   { href: "/dashboard/kitchen", label: "Kitchen (KDS)", icon: ChefHat },
+  { href: "/dashboard/feedback", label: "Feedback", icon: MessageSquareHeart },
   { href: "/dashboard/restaurant", label: "Restaurant", icon: Store },
   { href: "/dashboard/categories", label: "Categories", icon: FolderTree },
   { href: "/dashboard/items", label: "Menu Items", icon: UtensilsCrossed },
