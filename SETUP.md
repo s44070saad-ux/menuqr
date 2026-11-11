@@ -64,6 +64,11 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     a charge breakdown (`subtotal_amount`, `tax_amount`,
     `service_amount`) to `orders`, and replaces `place_customer_order`
     / `get_customer_order` so totals are computed server-side.
+12. **Then run the Phase 1.5 ETA migration the same way:**
+    `supabase/migration-phase1-eta.sql` adds `prep_time_minutes`
+    (default 20) to `restaurant_settings` — the customer order page
+    shows a Received → Preparing → Ready timeline and a ready-by ETA
+    from the confirmation time + this setting.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
