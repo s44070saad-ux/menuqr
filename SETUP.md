@@ -54,6 +54,10 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
    (Starter / Pro / Business; Pro default; explicit Free = no trial).
    The setup form writes the column; the homepage plan CTAs carry it
    through registration (`/register?plan=pro`).
+10. **Then run the Phase 1.1 allergens migration the same way:**
+    `supabase/migration-phase1-allergens.sql` adds `allergens` (text[]),
+    `dietary` (text[]) and `calories` (integer) to `menu_items`
+    (EU-14 allergen keys + dietary flags, all plans — legal info).
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
