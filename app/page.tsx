@@ -11,19 +11,19 @@ import HeroQr from "@/components/HeroQr";
 // Prices are platform configuration and can be changed by the super admin.
 const PLANS = [
   {
-    name: "Free", price: "PKR 0", period: "forever", highlight: false,
+    slug: "free", name: "Free", price: "PKR 0", period: "forever", highlight: false,
     features: ["5 menu items", "1 restaurant", "Basic QR code", "Basic menu design", "Platform branding"],
   },
   {
-    name: "Starter", price: "PKR 2,999", period: "/month", highlight: false,
+    slug: "starter", name: "Starter", price: "PKR 2,999", period: "/month", highlight: false,
     features: ["Unlimited menu items", "Custom restaurant branding", "QR code download (PNG + SVG)", "Menu themes & styled QR codes", "Basic analytics"],
   },
   {
-    name: "Pro", price: "PKR 4,999", period: "/month", highlight: true,
+    slug: "pro", name: "Pro", price: "PKR 4,999", period: "/month", highlight: true,
     features: ["Everything in Starter", "Direct ordering (dine-in + takeaway)", "Kitchen display (KDS)", "Item variations & add-ons", "WhatsApp order alerts", "Table QR codes", "Advanced analytics"],
   },
   {
-    name: "Business", price: "PKR 8,999", period: "/month", highlight: false,
+    slug: "business", name: "Business", price: "PKR 8,999", period: "/month", highlight: false,
     features: ["Everything in Pro", "Multiple restaurant branches", "Branch management", "Advanced analytics", "Priority support"],
   },
 ];
@@ -67,8 +67,8 @@ const FAQS = [
     a: "No — zero. Velora is fully self-serve: register, add your menu, download your QR code and print it. Some providers charge PKR 28,000 just for “professional installation”; we think a menu you set up yourself in 5 minutes shouldn't cost that.",
   },
   {
-    q: "How does the 3-day free Pro trial work?",
-    a: "Automatically. The moment you create your restaurant, Pro switches on free for 3 days — ordering, kitchen display, variations & add-ons, everything. No card, no commitment. When the trial ends you continue on the Free plan (your menu and QR keep working), and if you pay for Pro before the trial ends, your paid time stacks on top of the remaining trial days.",
+    q: "How does the 3-day free trial work?",
+    a: "You pick the plan. When you set up your restaurant, choose any paid plan — Starter, Pro or Business — and it switches on free for 3 days, every feature included. Pro is preselected because it's the most popular. No card, no commitment. When the trial ends you continue on the Free plan (your menu and QR keep working), and if you pay before the trial ends, your paid time stacks on top of the remaining trial days.",
   },
   {
     q: "How do I pay for a paid plan?",
@@ -108,7 +108,7 @@ export default function LandingPage() {
           <span className="font-heading text-lg font-semibold">Velora</span>
           <nav className="ml-auto flex items-center gap-1 sm:gap-2">
             <a href="#features" className="hidden min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink md:inline-flex">Features</a>
-            <Link href="/menu/dubai-foods" className="hidden min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink sm:inline-flex">Live demo</Link>
+            <Link href="/menu/spice-route" className="hidden min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink sm:inline-flex">Live demo</Link>
             <a href="#pricing" className="hidden min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink md:inline-flex">Pricing</a>
             <a href="#faq" className="hidden min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink md:inline-flex">FAQ</a>
             <Link href="/login" className="inline-flex min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink">Log in</Link>
@@ -137,12 +137,12 @@ export default function LandingPage() {
               <Link href="/register" className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 text-base font-semibold text-white hover:bg-brand-dark sm:w-auto">
                 Create my free menu <ArrowRight size={18} />
               </Link>
-              <Link href="/menu/dubai-foods" className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-base font-medium text-slate-700 hover:bg-slate-50 sm:w-auto">
+              <Link href="/menu/spice-route" className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-base font-medium text-slate-700 hover:bg-slate-50 sm:w-auto">
                 <MousePointer2 size={18} className="text-brand" /> See a live menu
               </Link>
             </div>
             <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
-              {["Live in about 5 minutes", "3-day free Pro trial included", "PKR pricing", "English + اردو", "0% order commission"].map((x) => (
+              {["Live in about 5 minutes", "3-day free trial — any plan", "PKR pricing", "English + اردو", "0% order commission"].map((x) => (
                 <li key={x} className="flex items-center gap-1.5"><Check size={15} className="text-brand" /> {x}</li>
               ))}
             </ul>
@@ -153,12 +153,12 @@ export default function LandingPage() {
             <div className="mx-auto max-w-sm rounded-[2rem] border border-slate-200 bg-appbg p-3 shadow-pop">
               <div className="overflow-hidden rounded-[1.6rem] bg-white text-left">
                 <div className="bg-ink px-5 py-5 text-white">
-                  <p className="font-heading text-lg font-semibold">Dubai Foods</p>
+                  <p className="font-heading text-lg font-semibold">Spice Route</p>
                   <p className="text-xs text-slate-300">Digital menu · Table 3 · اردو / EN</p>
                 </div>
                 <div className="space-y-3 px-5 py-4">
                   {[
-                    { name: "Zinger Burger", meta: "Crispy chicken · Large + Extra cheese", price: "PKR 550" },
+                    { name: "Chicken Malai Boti", meta: "Creamy charcoal-grilled · 8 pcs", price: "PKR 850" },
                     { name: "Chicken Karahi", meta: "Half · Desi ghee · Serves 2–3", price: "PKR 1,450" },
                     { name: "Mint Margarita", meta: "Fresh mint · Soda", price: "PKR 250" },
                   ].map((d) => (
@@ -183,7 +183,7 @@ export default function LandingPage() {
               <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-600">
                 <span className="h-2 w-2 rounded-full bg-amber-400" /> New order · Table 3
               </p>
-              <p className="mt-1.5 text-sm font-semibold">Zinger Burger ×1 <span className="font-normal text-slate-400">· Large, extra cheese</span></p>
+              <p className="mt-1.5 text-sm font-semibold">Chicken Malai Boti ×1 <span className="font-normal text-slate-400">· With mint raita</span></p>
               <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
                 <Check size={12} /> Confirmed — kitchen is preparing
               </p>
@@ -193,6 +193,17 @@ export default function LandingPage() {
             <div className="absolute -left-2 bottom-8 hidden rounded-2xl bg-white p-3 text-center shadow-pop sm:block lg:-left-8">
               <HeroQr size={96} />
               <p className="mt-1.5 text-[11px] font-semibold text-slate-500">Scan me — live demo</p>
+            </div>
+
+            {/* Mobile-only: live-order strip (the floating cards above are sm+) */}
+            <div className="mx-auto mt-4 max-w-sm rounded-2xl bg-white p-3.5 shadow-pop sm:hidden">
+              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-600">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" /> New order · Table 3
+              </p>
+              <p className="mt-1.5 text-sm font-semibold">Chicken Malai Boti ×1 <span className="font-normal text-slate-400">· With mint raita</span></p>
+              <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                <Check size={12} /> Confirmed — kitchen is preparing
+              </p>
             </div>
           </div>
         </div>
@@ -247,12 +258,12 @@ export default function LandingPage() {
             </span>
             <h2 className="mt-4 font-heading text-2xl font-bold sm:text-3xl">Don't take our word for it — open a real Velora menu</h2>
             <p className="mx-auto mt-3 max-w-xl leading-relaxed text-slate-300 lg:mx-0">
-              Dubai Foods is a demo restaurant running on Velora at this moment. Scan the code with
+              Spice Route is a demo restaurant running on Velora at this moment. Scan the code with
               your phone or tap through — themes, categories and ordering work exactly as your
               customers will see them.
             </p>
             <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row lg:justify-start sm:justify-center">
-              <Link href="/menu/dubai-foods" className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 font-semibold text-white hover:bg-brand-dark">
+              <Link href="/menu/spice-route" className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 font-semibold text-white hover:bg-brand-dark">
                 Open the live demo <ArrowRight size={18} />
               </Link>
               <a href="#how" className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/25 px-6 py-3 font-medium text-white hover:bg-white/10">
@@ -262,7 +273,7 @@ export default function LandingPage() {
           </div>
           <div className="shrink-0 rounded-3xl bg-white p-4 text-center shadow-pop">
             <HeroQr size={168} />
-            <p className="mt-2 text-xs font-semibold text-slate-500">veloraqr.vercel.app/menu/dubai-foods</p>
+            <p className="mt-2 text-xs font-semibold text-slate-500">veloraqr.vercel.app/menu/spice-route</p>
           </div>
         </div>
       </section>
@@ -328,7 +339,7 @@ export default function LandingPage() {
       {/* Plans */}
       <section id="pricing" className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <h2 className="text-center font-heading text-2xl font-bold sm:text-3xl">Simple pricing in PKR</h2>
-        <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">Every new restaurant starts with a <strong>free 3-day Pro trial</strong> — full ordering, kitchen display and variations, no card required. After that, stay on Free or upgrade; paid plans are activated by our team after payment confirmation. No setup fee, no commission, cancel anytime.</p>
+        <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">Every new restaurant starts with a <strong>free 3-day trial of any paid plan</strong> — pick Starter, Pro or Business when you set up (Pro is preselected, it's the most popular). No card required. After that, stay on Free or upgrade; paid plans are activated by our team after payment confirmation. No setup fee, no commission, cancel anytime.</p>
         <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {PLANS.map((p) => (
             <div key={p.name} className={`flex flex-col rounded-2xl bg-white p-6 shadow-card ring-1 ring-slate-100 ${p.highlight ? "!ring-2 !ring-brand" : ""}`}>
@@ -340,7 +351,7 @@ export default function LandingPage() {
                   <li key={f} className="flex items-start gap-2 text-sm text-slate-600"><Check size={16} className="mt-0.5 shrink-0 text-brand" /> {f}</li>
                 ))}
               </ul>
-              <Link href="/register" className={`mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold ${p.highlight ? "bg-brand text-white hover:bg-brand-dark" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}>
+              <Link href={p.slug === "free" ? "/register" : `/register?plan=${p.slug}`} className={`mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold ${p.highlight ? "bg-brand text-white hover:bg-brand-dark" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}>
                 Start with {p.name}
               </Link>
             </div>
@@ -382,7 +393,7 @@ export default function LandingPage() {
           <span className="flex items-center gap-2 font-heading font-semibold text-ink"><QrCode size={18} className="text-brand" /> Velora</span>
           <p>Digital menus, QR codes & ordering for restaurants, cafes and hotels in Pakistan.</p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/menu/dubai-foods" className="hover:text-ink">Live demo</Link>
+            <Link href="/menu/spice-route" className="hover:text-ink">Live demo</Link>
             <a href="#pricing" className="hover:text-ink">Pricing</a>
             <a href="#faq" className="hover:text-ink">FAQ</a>
             <Link href="/login" className="hover:text-ink">Log in</Link>
