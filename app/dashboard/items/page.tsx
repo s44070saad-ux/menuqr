@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Download, FileText, Loader2, Pencil, Plus, Search, SlidersHorizontal, Star, Store, Trash2, Upload } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
+import SchedulesCard from "@/components/SchedulesCard";
 import ImageField from "@/components/ImageField";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnGhost, btnPrimary, inputCls, labelCls } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
@@ -20,8 +21,9 @@ interface ItemForm {
   category_id: string; image_url: string; is_available: boolean; is_featured: boolean;
   calories: string; allergens: string[]; dietary: string[];
   suggested: string[];
+  avail_from: string; avail_to: string;
 }
-const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: "", category_id: "", image_url: "", is_available: true, is_featured: false, calories: "", allergens: [], dietary: [], suggested: [] };
+const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: "", category_id: "", image_url: "", is_available: true, is_featured: false, calories: "", allergens: [], dietary: [], suggested: [], avail_from: "", avail_to: "" };
 
 export default function MenuItemsPage() {
   const { loading, userId, restaurant, subscription } = useOwner();
@@ -182,6 +184,8 @@ export default function MenuItemsPage() {
       is_available: form.is_available, is_featured: form.is_featured,
       calories, allergens: form.allergens, dietary: form.dietary,
       suggested_item_ids: form.suggested,
+      available_from: form.avail_from || null,
+      available_to: form.avail_to || null,
     };
     const { error: err } = editing
       ? await supabase.from("menu_items").update(payload).eq("id", editing.id)
@@ -232,6 +236,8 @@ export default function MenuItemsPage() {
       calories: item.calories == null ? "" : String(item.calories),
       allergens: item.allergens ?? [], dietary: item.dietary ?? [],
       suggested: item.suggested_item_ids ?? [],
+      avail_from: item.available_from ? item.available_from.slice(0, 5) : "",
+      avail_to: item.available_to ? item.available_to.slice(0, 5) : "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -434,6 +440,25 @@ export default function MenuItemsPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 p-3.5">
+                <p className="text-sm font-semibold text-ink">Availability window (optional)</p>
+                <p className="mt-0.5 text-xs text-slate-500">Show and sell this dish only between these times, restaurant-local — e.g. a breakfast dish from 8:00 AM to 12:00 PM. Outside the window it appears as unavailable and cannot be ordered. Leave both empty for all day. A window past midnight (22:00 – 02:00) works too.</p>
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-sm">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="av-from">Available from</label>
+                    <input id="av-from" type="time" className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" value={form.avail_from}
+                      onChange={(e) => set("avail_from", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="av-to">Until</label>
+                    <input id="av-to" type="time" className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" value={form.avail_to}
+                      onChange={(e) => set("avail_to", e.target.value)} />
+                  </div>
+                </div>
+                {(form.avail_from && !form.avail_to) || (!form.avail_from && form.avail_to) ? (
+                  <p className="mt-2 text-xs font-medium text-amber-700">Set both times (or clear both) — a single time is ignored.</p>
+                ) : null}
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3.5">
                 <p className="text-sm font-semibold text-ink">Pairs well with (upselling)</p>
                 <p className="mt-0.5 text-xs text-slate-500">Pick up to 3 items to suggest when a guest views or orders this dish — they appear in the dish options and in the cart with one-tap add. Suggestions show on Pro and Business plans.</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -492,6 +517,9 @@ export default function MenuItemsPage() {
                           ? <><span className="font-semibold text-brand-dark">{formatPrice(Number(item.discount_price), restaurant.currency)}</span> <span className="line-through">{formatPrice(Number(item.price), restaurant.currency)}</span></>
                           : formatPrice(Number(item.price), restaurant.currency)}
                         {" "}· {item.is_available ? "Available" : "Unavailable"}
+                        {item.available_from && item.available_to && (
+                          <> · {item.available_from.slice(0, 5)}–{item.available_to.slice(0, 5)} only</>
+                        )}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center">
@@ -609,6 +637,11 @@ export default function MenuItemsPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+      {restaurant && (plan?.slug === "pro" || plan?.slug === "business") && (
+        <div className="mt-4">
+          <SchedulesCard restaurantId={restaurant.id} categories={categories} items={items} />
         </div>
       )}
     </DashboardShell>
