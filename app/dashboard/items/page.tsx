@@ -9,14 +9,16 @@ import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
 import { formatPrice } from "@/lib/utils";
 import type { Category, ItemOption, ItemOptionGroup, MenuItem } from "@/lib/types";
+import { ALLERGENS, DIETARY } from "@/lib/allergens";
 
 interface GroupWithOptions extends ItemOptionGroup { options: ItemOption[] }
 
 interface ItemForm {
   name: string; description: string; price: string; discount_price: string;
   category_id: string; image_url: string; is_available: boolean; is_featured: boolean;
+  calories: string; allergens: string[]; dietary: string[];
 }
-const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: "", category_id: "", image_url: "", is_available: true, is_featured: false };
+const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: "", category_id: "", image_url: "", is_available: true, is_featured: false, calories: "", allergens: [], dietary: [] };
 
 export default function MenuItemsPage() {
   const { loading, userId, restaurant, subscription } = useOwner();
@@ -59,6 +61,8 @@ export default function MenuItemsPage() {
   }), [items, search, filterCat]);
 
   const catName = (id: string | null) => categories.find((c) => c.id === id)?.name ?? "Uncategorised";
+  const toggleArr = (field: "allergens" | "dietary", key: string) =>
+    setForm((f) => ({ ...f, [field]: f[field].includes(key) ? f[field].filter((x) => x !== key) : [...f[field], key] }));
   const set = (k: keyof ItemForm, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   function resetForm() { setEditing(null); setForm(EMPTY); }
@@ -75,12 +79,15 @@ export default function MenuItemsPage() {
     const discount = form.discount_price.trim() === "" ? null : parseFloat(form.discount_price);
     if (discount !== null && (Number.isNaN(discount) || discount < 0)) { setError("Discount price must be a valid number."); return; }
     setBusy(true); setError(null); setSuccess(null);
+    const calories = form.calories.trim() === "" ? null : parseInt(form.calories, 10);
+    if (calories !== null && (Number.isNaN(calories) || calories < 0 || calories > 10000)) { setError("Calories must be a whole number between 0 and 10,000 — or leave it empty."); return; }
     const payload = {
       name: form.name.trim(), description: form.description.trim() || null,
       price, discount_price: discount,
       category_id: form.category_id || null,
       image_url: form.image_url.trim() || null,
       is_available: form.is_available, is_featured: form.is_featured,
+      calories, allergens: form.allergens, dietary: form.dietary,
     };
     const { error: err } = editing
       ? await supabase.from("menu_items").update(payload).eq("id", editing.id)
@@ -128,6 +135,8 @@ export default function MenuItemsPage() {
       discount_price: item.discount_price == null ? "" : String(item.discount_price),
       category_id: item.category_id ?? "", image_url: item.image_url ?? "",
       is_available: item.is_available, is_featured: item.is_featured,
+      calories: item.calories == null ? "" : String(item.calories),
+      allergens: item.allergens ?? [], dietary: item.dietary ?? [],
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -281,6 +290,39 @@ export default function MenuItemsPage() {
                 <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-slate-700">
                   <input type="checkbox" checked={form.is_featured} onChange={(e) => set("is_featured", e.target.checked)} className="h-5 w-5 accent-teal-700" /> Featured (shown in the Featured section)
                 </label>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3.5">
+                <p className="text-sm font-semibold text-ink">Dietary, allergens & calories</p>
+                <p className="mt-0.5 text-xs text-slate-500">Shown on your public menu. Guests can filter by dietary need and hide dishes containing an allergen. Allergens follow the EU list of 14 — tick everything the dish contains.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[180px_1fr]">
+                  <div>
+                    <label className={labelCls} htmlFor="ical">Calories (kcal)</label>
+                    <input id="ical" type="number" min="0" max="10000" step="1" className={inputCls} value={form.calories}
+                      onChange={(e) => set("calories", e.target.value)} placeholder="e.g. 520" />
+                  </div>
+                  <div>
+                    <span className={labelCls}>Dietary flags</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DIETARY.map((d) => (
+                        <button key={d.key} type="button" onClick={() => toggleArr("dietary", d.key)} aria-pressed={form.dietary.includes(d.key)}
+                          className={`min-h-[36px] rounded-full px-3 py-1.5 text-[13px] font-medium ${form.dietary.includes(d.key) ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <span className={labelCls}>Contains these allergens</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ALLERGENS.map((a) => (
+                      <button key={a.key} type="button" onClick={() => toggleArr("allergens", a.key)} aria-pressed={form.allergens.includes(a.key)}
+                        className={`min-h-[36px] rounded-full px-3 py-1.5 text-[13px] font-medium ${form.allergens.includes(a.key) ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="submit" disabled={busy || atLimit} className={btnPrimary}>
