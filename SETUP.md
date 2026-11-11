@@ -58,6 +58,12 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     `supabase/migration-phase1-allergens.sql` adds `allergens` (text[]),
     `dietary` (text[]) and `calories` (integer) to `menu_items`
     (EU-14 allergen keys + dietary flags, all plans — legal info).
+11. **Then run the Phase 1.4 charges migration the same way:**
+    `supabase/migration-phase1-charges.sql` adds `tax_percent`,
+    `service_percent` and `min_order_amount` to `restaurant_settings`,
+    a charge breakdown (`subtotal_amount`, `tax_amount`,
+    `service_amount`) to `orders`, and replaces `place_customer_order`
+    / `get_customer_order` so totals are computed server-side.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
