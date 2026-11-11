@@ -5,7 +5,7 @@ update public.menu_items mi set suggested_item_ids = coalesce((
   where x.restaurant_id = mi.restaurant_id and x.name in ('Mint Margarita', 'Tandoori Roti')
 ), '{}')
 from public.restaurants r
-where r.id = mi.restaurant_id and r.slug = 'spice-route' and mi.name = 'Chicken Malai Boti';
+where r.id = mi.restaurant_id and r.slug = 'spice-route' and mi.name = 'Chicken Malai Boti (8 pcs)';
 
 update public.menu_items mi set suggested_item_ids = coalesce((
   select array_agg(x.id) from public.menu_items x
