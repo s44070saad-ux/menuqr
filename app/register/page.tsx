@@ -57,7 +57,11 @@ export default function RegisterPage() {
       setNeedsConfirm(true);
       return;
     }
-    router.replace("/dashboard/restaurant?welcome=1");
+    // Carry a plan picked on the pricing page (?plan=pro) into restaurant
+    // setup, where it preselects the free-trial plan.
+    const plan = new URLSearchParams(window.location.search).get("plan");
+    const planQs = plan && ["starter", "pro", "business"].includes(plan) ? `&plan=${plan}` : "";
+    router.replace(`/dashboard/restaurant?welcome=1${planQs}`);
   }
 
   if (needsConfirm) {
@@ -74,7 +78,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell title="Create your free account" subtitle="Start with the Free plan: 5 menu items, 1 restaurant, permanent QR code.">
+    <AuthShell title="Create your free account" subtitle="Then set up your restaurant and trial any paid plan free for 3 days — no card required.">
       <form onSubmit={onSubmit} className="space-y-4">
         <ErrorBox message={error} />
         <div>
