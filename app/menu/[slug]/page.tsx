@@ -657,6 +657,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       if (error) throw error;
       const res = data as { order_id: string; customer_token: string };
       const creds = { id: res.order_id, token: res.customer_token };
+      setMyOrder(null); // clear the previous order while the new one loads
       try { localStorage.setItem(`menuqr_order_${restaurant.id}`, JSON.stringify(creds)); } catch { /* ignore */ }
       setMyOrderCreds(creds);
       setLines([]);
