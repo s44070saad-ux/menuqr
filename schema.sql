@@ -135,6 +135,9 @@ create table if not exists public.menu_items (
   is_available boolean not null default true,
   is_featured boolean not null default false,
   display_order integer not null default 0,
+  allergens text[] not null default '{}',
+  dietary text[] not null default '{}',
+  calories integer check (calories is null or (calories >= 0 and calories <= 10000)),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
