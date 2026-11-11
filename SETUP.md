@@ -69,6 +69,18 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     (default 20) to `restaurant_settings` — the customer order page
     shows a Received → Preparing → Ready timeline and a ready-by ETA
     from the confirmation time + this setting.
+13. **Then run the Phase 2 upsell migration the same way:**
+    `supabase/migration-phase2-upsell.sql` adds
+    `menu_items.suggested_item_ids` (owner-picked "pairs well with"
+    suggestions), `order_items.via_upsell` (suggestion attribution),
+    the `popular_item_ids()` function behind the "Popular" badge, and
+    replaces `place_customer_order` to store the attribution.
+14. **Then run the Phase 2 feedback migration the same way:**
+    `supabase/migration-phase2-feedback.sql` adds
+    `restaurant_settings.google_review_url`, the private `feedback`
+    table (owner-read RLS, no direct public writes), and the
+    token-gated `submit_order_feedback()` RPC used by the post-order
+    review/feedback prompt.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
