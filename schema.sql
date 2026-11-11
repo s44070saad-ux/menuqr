@@ -304,7 +304,8 @@ create trigger trg_handle_new_user after insert on auth.users
 create or replace function public.handle_new_restaurant() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
-  free_plan_id uuid;
+  v_plan_id uuid;
+  v_is_trial boolean := false;
 begin
   insert into public.restaurant_members (restaurant_id, user_id, member_role)
   values (new.id, new.owner_id, 'owner')
@@ -317,10 +318,24 @@ begin
   insert into public.qr_codes (restaurant_id, label)
   values (new.id, 'Main QR');
 
-  select id into free_plan_id from public.subscription_plans where slug = 'free' limit 1;
-  if free_plan_id is not null then
-    insert into public.subscriptions (restaurant_id, plan_id, status)
-    values (new.id, free_plan_id, 'active')
+  -- 3-day free Pro trial for every new restaurant (falls back to Free
+  -- only if the Pro plan row somehow does not exist). restaurant_plan_slug
+  -- returns 'free' once a trialing subscription's ends_at has passed.
+  select id into v_plan_id from public.subscription_plans where slug = 'pro' limit 1;
+  if v_plan_id is not null then
+    v_is_trial := true;
+  else
+    select id into v_plan_id from public.subscription_plans where slug = 'free' limit 1;
+  end if;
+  if v_plan_id is not null then
+    insert into public.subscriptions (restaurant_id, plan_id, status, starts_at, ends_at)
+    values (
+      new.id,
+      v_plan_id,
+      case when v_is_trial then 'trialing' else 'active' end,
+      now(),
+      case when v_is_trial then now() + interval '3 days' else null end
+    )
     on conflict (restaurant_id) do nothing;
   end if;
   return new;
@@ -517,9 +532,9 @@ create policy menuqr_images_delete on storage.objects for delete
 -- ---------------------------------------------------------------------
 insert into public.subscription_plans (slug, name, price_monthly, currency, max_items, max_restaurants, features, display_order) values
   ('free',     'Free',     0,    'PKR', 5,    1,    '["5 menu items","1 restaurant","Basic QR code","Basic menu design","Platform branding"]'::jsonb, 1),
-  ('starter',  'Starter',  2999,  'PKR', null, 1,    '["Unlimited menu items","Custom restaurant branding","QR code download (PNG + SVG)","Basic analytics"]'::jsonb, 2),
-  ('pro',      'Pro',      4999, 'PKR', null, 1,    '["Everything in Starter","Advanced analytics","Multiple menus (coming with plan)","Multiple QR codes","Extra menu customization"]'::jsonb, 3),
-  ('business', 'Business', 8999, 'PKR', null, null, '["Multiple restaurant branches","Branch management","Advanced analytics","Priority support"]'::jsonb, 4)
+  ('starter',  'Starter',  2999,  'PKR', null, 1,    '["Unlimited menu items","Custom restaurant branding","QR code download (PNG + SVG)","Menu themes & styled QR codes","Basic analytics"]'::jsonb, 2),
+  ('pro',      'Pro',      4999, 'PKR', null, 1,    '["Everything in Starter","Advanced analytics","Direct ordering (dine-in + takeaway)","Table QR codes","Live order dashboard","Kitchen display (KDS)","Item variations & add-ons","WhatsApp order alerts","Extra menu customization"]'::jsonb, 3),
+  ('business', 'Business', 8999, 'PKR', null, null, '["Everything in Pro","Multiple restaurant branches","Branch management","Advanced analytics","Priority support"]'::jsonb, 4)
 on conflict (slug) do update set
   name = excluded.name,
   price_monthly = excluded.price_monthly,
