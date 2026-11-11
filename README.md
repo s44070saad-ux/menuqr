@@ -51,7 +51,7 @@ timestamps, indexes.
   row. Profile auto-created by a trigger on `auth.users` (+ app fallback).
 - **Storage:** public bucket `menu-images` (5 MB, images only), public read,
   writes scoped to the uploader's own `{userId}/…` folder.
-- **Seed data:** only the 4 subscription plans (Free 15 items/1 restaurant,
+- **Seed data:** only the 4 subscription plans (Free 5 items/1 restaurant,
   Starter, Pro, Business) — platform configuration. No fake restaurants,
   categories or dishes anywhere.
 - Only the public anon/publishable key is used in the frontend. The
