@@ -89,6 +89,19 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     Pro/Business restaurants can write them), and replaces
     `place_customer_order` to enforce windows + schedule discounts
     server-side.
+16. **Then run the Phase 3 migration the same way:**
+    `supabase/migration-phase3.sql` adds the `customers` table
+    (auto-built from orders by phone), `coupons` + `gift_cards`
+    (Pro/Business writes in RLS, re-validated inside
+    `place_customer_order` — coupons discount before tax/service,
+    gift cards pay last against the post-charge total), loyalty
+    settings on `restaurant_settings`, the `winback_sends` log, and
+    the `preview_discount` / `unsubscribe_customer` RPCs.
+17. **Win-back email (optional):** create a free Resend account and
+    set `RESEND_API_KEY` (optionally `RESEND_FROM`) in the Vercel
+    project env vars. Without it, the Customers page's win-back
+    composer states that email is not configured — nothing is sent
+    or faked.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
