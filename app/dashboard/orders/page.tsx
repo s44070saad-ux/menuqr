@@ -2,9 +2,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Store, ClipboardList, Phone, Check, CheckCheck, X, Lock, RefreshCw, BellRing,
+  Store, ClipboardList, Phone, Check, CheckCheck, X, Lock, RefreshCw, BellRing, Printer,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
+import PrintTicket from "@/components/PrintTicket";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnPrimary } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
@@ -27,8 +28,17 @@ export default function OrdersPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [orderingOn, setOrderingOn] = useState<boolean | null>(null);
   const [savingToggle, setSavingToggle] = useState(false);
-  const [charges, setCharges] = useState<{ tax: string; service: string; min: string }>({ tax: "0", service: "0", min: "0" });
+  const [charges, setCharges] = useState<{ tax: string; service: string; min: string; prep: string }>({ tax: "0", service: "0", min: "0", prep: "20" });
   const [savingCharges, setSavingCharges] = useState(false);
+  const [printReq, setPrintReq] = useState<{ order: Order; kind: "kitchen" | "receipt" } | null>(null);
+
+  useEffect(() => {
+    if (!printReq) return;
+    const t = setTimeout(() => window.print(), 80);
+    const clear = () => setPrintReq(null);
+    window.addEventListener("afterprint", clear);
+    return () => { clearTimeout(t); window.removeEventListener("afterprint", clear); };
+  }, [printReq]);
   const seenIds = useRef<Set<string> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -74,13 +84,14 @@ export default function OrdersPage() {
     if (!supabase || !restaurant) return;
     (async () => {
       const { data } = await supabase.from("restaurant_settings")
-        .select("enable_ordering, tax_percent, service_percent, min_order_amount").eq("restaurant_id", restaurant.id).single();
-      const d = data as { enable_ordering?: boolean; tax_percent?: number; service_percent?: number; min_order_amount?: number } | null;
+        .select("enable_ordering, tax_percent, service_percent, min_order_amount, prep_time_minutes").eq("restaurant_id", restaurant.id).single();
+      const d = data as { enable_ordering?: boolean; tax_percent?: number; service_percent?: number; min_order_amount?: number; prep_time_minutes?: number } | null;
       setOrderingOn(Boolean(d?.enable_ordering ?? true));
       setCharges({
         tax: String(Number(d?.tax_percent ?? 0)),
         service: String(Number(d?.service_percent ?? 0)),
         min: String(Number(d?.min_order_amount ?? 0)),
+        prep: String(Number(d?.prep_time_minutes ?? 20)),
       });
     })();
   }, [restaurant]);
@@ -99,14 +110,16 @@ export default function OrdersPage() {
   async function saveCharges() {
     if (!supabase || !restaurant || savingCharges) return;
     const tax = parseFloat(charges.tax), service = parseFloat(charges.service), min = parseFloat(charges.min);
+    const prep = parseInt(charges.prep, 10);
     if ([tax, service].some((v) => Number.isNaN(v) || v < 0 || v > 100)) { setError("Tax and service charge must be percentages between 0 and 100."); return; }
     if (Number.isNaN(min) || min < 0) { setError("Minimum order must be 0 or more."); return; }
+    if (Number.isNaN(prep) || prep < 1 || prep > 240) { setError("Preparation time must be between 1 and 240 minutes."); return; }
     setSavingCharges(true); setError(null); setSuccess(null);
     const { error: err } = await supabase.from("restaurant_settings")
-      .update({ tax_percent: tax, service_percent: service, min_order_amount: min })
+      .update({ tax_percent: tax, service_percent: service, min_order_amount: min, prep_time_minutes: prep })
       .eq("restaurant_id", restaurant.id);
     if (err) setError(err.message);
-    else setSuccess("Charges saved — new orders will include them and show the breakdown to customers before they order.");
+    else setSuccess("Settings saved — charges apply to new orders, and the prep time drives customer ETAs.");
     setSavingCharges(false);
   }
 
@@ -197,11 +210,11 @@ export default function OrdersPage() {
 
           {/* Charges (Phase 1.4) */}
           <Card>
-            <p className="font-heading text-sm font-semibold text-ink">Tax, service charge & minimum order</p>
+            <p className="font-heading text-sm font-semibold text-ink">Tax, service charge, minimum order & prep time</p>
             <p className="mt-0.5 text-xs leading-snug text-slate-500">
-              Added on top of the items subtotal and shown to the customer in the cart before they order. Leave at 0 to switch off. Totals are always calculated by the system — never typed by hand.
+              Tax and service are added on top of the items subtotal and shown to the customer in the cart before they order (leave at 0 to switch off; totals are always calculated by the system). Prep time drives the "ready by" estimate on the customer's order-tracking page.
             </p>
-            <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="ch-tax">Tax %</label>
                 <input id="ch-tax" type="number" min="0" max="100" step="0.1" value={charges.tax}
@@ -212,6 +225,12 @@ export default function OrdersPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="ch-svc">Service %</label>
                 <input id="ch-svc" type="number" min="0" max="100" step="0.1" value={charges.service}
                   onChange={(e) => setCharges((c) => ({ ...c, service: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor="ch-prep">Prep time (minutes)</label>
+                <input id="ch-prep" type="number" min="1" max="240" step="1" value={charges.prep}
+                  onChange={(e) => setCharges((c) => ({ ...c, prep: e.target.value }))}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-[16px]" />
               </div>
               <div>
@@ -265,7 +284,8 @@ export default function OrdersPage() {
             <div className="space-y-3">
               {visible.map((o) => (
                 <OrderCard key={o.id} order={o} currency={restaurant.currency} busy={busyId === o.id}
-                  onStatus={(s) => setStatus(o, s)} />
+                  onStatus={(s) => setStatus(o, s)}
+                  onPrint={(kind) => setPrintReq({ order: o, kind })} />
               ))}
             </div>
           )}
@@ -275,6 +295,10 @@ export default function OrdersPage() {
             the counter — Velora does not take online payment for orders yet.
           </p>
         </div>
+      )}
+      {printReq && restaurant && (
+        <PrintTicket restaurantName={restaurant.name} currency={restaurant.currency}
+          order={printReq.order} kind={printReq.kind} />
       )}
     </DashboardShell>
   );
@@ -297,8 +321,9 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-function OrderCard({ order: o, currency, busy, onStatus }: {
+function OrderCard({ order: o, currency, busy, onStatus, onPrint }: {
   order: Order; currency: string; busy: boolean; onStatus: (s: OrderStatus) => void;
+  onPrint: (kind: "kitchen" | "receipt") => void;
 }) {
   return (
     <Card className={o.status === "pending" ? "ring-2 ring-amber-300" : ""}>
@@ -342,6 +367,14 @@ function OrderCard({ order: o, currency, busy, onStatus }: {
         <span className="font-heading text-base font-bold text-ink">{formatPrice(Number(o.total_amount), currency)}</span>
         <span className="text-xs text-slate-400">pay at counter</span>
         <span className="ml-auto flex flex-wrap gap-2">
+          <button type="button" onClick={() => onPrint("kitchen")}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
+            <Printer size={15} /> Ticket
+          </button>
+          <button type="button" onClick={() => onPrint("receipt")}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
+            <Printer size={15} /> Receipt
+          </button>
           {o.status === "pending" && (
             <>
               <button type="button" disabled={busy} onClick={() => onStatus("confirmed")}
