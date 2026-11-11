@@ -101,7 +101,7 @@ export default function DashboardShell({ title, children }: { title: string; chi
         <QrCode size={20} />
       </span>
       <div>
-        <p className="font-heading text-lg font-semibold leading-none">MenuQR</p>
+        <p className="font-heading text-lg font-semibold leading-none">Velora</p>
         <p className="mt-0.5 text-[11px] text-slate-300">Restaurant dashboard</p>
       </div>
     </>

@@ -10,7 +10,7 @@ export default function AuthShell({ title, subtitle, children }: { title: string
       <div className="w-full max-w-md">
         <Link href="/" className="mb-6 flex items-center justify-center gap-2">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white"><QrCode size={22} /></span>
-          <span className="font-heading text-xl font-semibold text-ink">MenuQR</span>
+          <span className="font-heading text-xl font-semibold text-ink">Velora</span>
         </Link>
         {!isSupabaseConfigured ? (
           <NotConfigured />
