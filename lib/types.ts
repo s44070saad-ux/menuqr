@@ -74,6 +74,9 @@ export interface RestaurantSettings {
   google_review_url?: string | null;
   /** Phase 2.4: IANA timezone for availability windows and schedules. */
   timezone?: string;
+  /** Phase 3: loyalty stamps (completed orders per target = reward). */
+  loyalty_enabled?: boolean;
+  loyalty_buy_x?: number;
   qr_color: string;
   card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
@@ -174,6 +177,10 @@ export interface Order {
   subtotal_amount?: number | null;
   tax_amount?: number;
   service_amount?: number;
+  /** Phase 3: coupon / gift card applied at checkout (server-validated). */
+  discount_amount?: number;
+  coupon_code?: string | null;
+  gift_card_amount?: number;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
@@ -247,6 +254,12 @@ export interface CustomerOrder {
   subtotal_amount?: number | null;
   tax_amount?: number;
   service_amount?: number;
+  /** Phase 3 additions returned by get_customer_order. */
+  discount_amount?: number;
+  coupon_code?: string | null;
+  gift_card_amount?: number;
+  /** Present only when loyalty is enabled for the restaurant. */
+  loyalty?: { stamps: number; cycle: number; buy_x: number; reward_ready: boolean } | null;
   created_at: string;
   updated_at: string;
   items: { item_name: string; unit_price: number; quantity: number; subtotal: number; options?: ChosenOption[] }[];
@@ -281,4 +294,50 @@ export interface ItemView {
   menu_item_id: string;
   category_id: string | null;
   created_at: string;
+}
+
+/** Phase 3 — customer database row (auto-built from orders, keyed by phone). */
+export interface Customer {
+  id: string;
+  restaurant_id: string;
+  name: string | null;
+  phone: string;
+  email: string | null;
+  email_consent: boolean;
+  unsubscribe_token: string;
+  first_order_at: string;
+  last_order_at: string;
+  order_count: number;
+  total_spent: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Phase 3 — discount coupon (validated server-side at order time). */
+export interface Coupon {
+  id: string;
+  restaurant_id: string;
+  code: string;
+  kind: "percent" | "fixed";
+  value: number;
+  min_order_amount: number;
+  max_redemptions: number | null;
+  times_redeemed: number;
+  first_order_only: boolean;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** Phase 3 — prepaid gift card (balance debited server-side at order time). */
+export interface GiftCard {
+  id: string;
+  restaurant_id: string;
+  code: string;
+  initial_amount: number;
+  balance: number;
+  note: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
