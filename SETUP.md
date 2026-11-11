@@ -81,6 +81,14 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     table (owner-read RLS, no direct public writes), and the
     token-gated `submit_order_feedback()` RPC used by the post-order
     review/feedback prompt.
+15. **Then run the Phase 2 schedules migration the same way:**
+    `supabase/migration-phase2-schedules.sql` adds per-item
+    availability windows (`available_from`/`available_to`),
+    `restaurant_settings.timezone`, and the `price_schedules`
+    happy-hour table (RLS: public reads active schedules, only
+    Pro/Business restaurants can write them), and replaces
+    `place_customer_order` to enforce windows + schedule discounts
+    server-side.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
