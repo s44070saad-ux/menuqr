@@ -298,15 +298,15 @@ export default function LandingPage() {
       {/* Comparison */}
       <section className="border-y border-slate-100 bg-appbg py-14">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
-          <h2 className="text-center font-heading text-2xl font-bold sm:text-3xl">Velora vs Qlinko</h2>
-          <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">Checked against Qlinko's public pricing and product in November 2026.</p>
+          <h2 className="text-center font-heading text-2xl font-bold sm:text-3xl">Velora vs Others</h2>
+          <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">Checked against other QR-menu providers' public pricing and products in November 2026.</p>
           <div className="mt-8 overflow-hidden rounded-2xl bg-white shadow-card">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-500">
                   <th className="px-4 py-3 font-medium sm:px-5">Feature</th>
                   <th className="px-4 py-3 font-heading font-bold text-brand-dark sm:px-5">Velora</th>
-                  <th className="hidden px-4 py-3 font-medium sm:table-cell sm:px-5">Qlinko</th>
+                  <th className="hidden px-4 py-3 font-medium sm:table-cell sm:px-5">Others</th>
                 </tr>
               </thead>
               <tbody>
@@ -319,7 +319,7 @@ export default function LandingPage() {
                       </span>
                       <span className="mt-1 flex items-start gap-1.5 text-slate-500 sm:hidden">
                         {row.win ? <X size={15} className="mt-0.5 shrink-0 text-red-400" /> : <span className="w-[15px]" />}
-                        Qlinko: {row.qlinko}
+                        Others: {row.qlinko}
                       </span>
                     </td>
                     <td className="hidden px-4 py-3 text-slate-500 sm:table-cell sm:px-5">
