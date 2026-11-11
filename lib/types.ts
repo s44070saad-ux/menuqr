@@ -50,6 +50,8 @@ export interface Restaurant {
   updated_at: string;
 }
 
+export type MenuTheme = "classic" | "midnight" | "fresh" | "royal";
+
 export interface RestaurantSettings {
   id: string;
   restaurant_id: string;
@@ -60,8 +62,40 @@ export interface RestaurantSettings {
   enable_whatsapp: boolean;
   enable_ordering: boolean;
   footer_text: string | null;
+  menu_theme: MenuTheme | string;
+  qr_color: string;
+  card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ItemOptionGroup {
+  id: string;
+  restaurant_id: string;
+  menu_item_id: string;
+  name: string;
+  selection_type: "single" | "multi";
+  is_required: boolean;
+  display_order: number;
+  created_at: string;
+}
+
+export interface ItemOption {
+  id: string;
+  restaurant_id: string;
+  group_id: string;
+  name: string;
+  price_delta: number;
+  is_available: boolean;
+  display_order: number;
+  created_at: string;
+}
+
+/** One chosen option as snapshotted onto an order item at order time. */
+export interface ChosenOption {
+  group_name: string;
+  option_name: string;
+  price_delta: number;
 }
 
 export interface Category {
@@ -130,6 +164,7 @@ export interface OrderItem {
   unit_price: number;
   quantity: number;
   subtotal: number;
+  options_snapshot?: ChosenOption[];
   created_at: string;
 }
 
@@ -161,7 +196,7 @@ export interface CustomerOrder {
   total_amount: number;
   created_at: string;
   updated_at: string;
-  items: { item_name: string; unit_price: number; quantity: number; subtotal: number }[];
+  items: { item_name: string; unit_price: number; quantity: number; subtotal: number; options?: ChosenOption[] }[];
 }
 
 export interface Subscription {
