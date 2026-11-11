@@ -12,7 +12,7 @@ import HeroQr from "@/components/HeroQr";
 const PLANS = [
   {
     slug: "free", name: "Free", price: "PKR 0", period: "forever", highlight: false,
-    features: ["5 menu items", "1 restaurant", "Basic QR code", "Basic menu design", "Platform branding"],
+    features: ["5 menu items", "1 restaurant", "Basic QR code", "Basic menu design", "Platform branding", "Allergen, dietary & calorie labels"],
   },
   {
     slug: "starter", name: "Starter", price: "PKR 2,999", period: "/month", highlight: false,
