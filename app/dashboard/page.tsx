@@ -14,6 +14,7 @@ import { formatPrice, startOfMonthISO, startOfTodayISO } from "@/lib/utils";
 interface Stats {
   items: number; categories: number; available: number; unavailable: number;
   scansToday: number; scansMonth: number; scansTotal: number;
+  pendingOrders: number;
   popular: { id: string; name: string; price: number; views: number }[];
 }
 
@@ -28,13 +29,14 @@ export default function DashboardOverviewPage() {
     (async () => {
       try {
         const rid = restaurant.id;
-        const [itemsRes, catsRes, todayRes, monthRes, totalRes, viewsRes] = await Promise.all([
+        const [itemsRes, catsRes, todayRes, monthRes, totalRes, viewsRes, pendingRes] = await Promise.all([
           supabase.from("menu_items").select("id, is_available").eq("restaurant_id", rid),
           supabase.from("categories").select("id", { count: "exact", head: true }).eq("restaurant_id", rid),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).gte("created_at", startOfTodayISO()),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).gte("created_at", startOfMonthISO()),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid),
           supabase.from("item_views").select("menu_item_id").eq("restaurant_id", rid).limit(2000),
+          supabase.from("orders").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "pending"),
         ]);
         if (cancelled) return;
         const items = itemsRes.data ?? [];
@@ -60,6 +62,7 @@ export default function DashboardOverviewPage() {
             scansToday: todayRes.count ?? 0,
             scansMonth: monthRes.count ?? 0,
             scansTotal: totalRes.count ?? 0,
+            pendingOrders: pendingRes.count ?? 0,
             popular,
           });
         }
@@ -95,11 +98,20 @@ export default function DashboardOverviewPage() {
 
           {!stats ? <Loading label="Loading statistics…" /> : (
             <>
+              {stats.pendingOrders > 0 && (
+                <Link href="/dashboard/orders" className="flex items-center gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4 text-amber-900 shadow-card">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400 font-heading text-base font-bold text-white">{stats.pendingOrders}</span>
+                  <span className="flex-1 text-sm font-medium">
+                    new order{stats.pendingOrders === 1 ? "" : "s"} waiting for confirmation — tap to open Orders.
+                  </span>
+                  <ArrowRight size={18} className="shrink-0" />
+                </Link>
+              )}
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard icon={UtensilsCrossed} label="Menu items" value={stats.items} sub={`${stats.available} available`} />
                 <StatCard icon={FolderTree} label="Categories" value={stats.categories} sub="on your menu" />
-                <StatCard icon={ScanLine} label="Scans today" value={stats.scansToday} sub={`${stats.scansMonth} this month`} />
-                <StatCard icon={CalendarDays} label="Total scans" value={stats.scansTotal} sub="all time menu visits" />
+                <StatCard icon={ScanLine} label="Menu visits today" value={stats.scansToday} sub={`${stats.scansMonth} this month`} />
+                <StatCard icon={CalendarDays} label="Total menu visits" value={stats.scansTotal} sub="QR scans + link visits" />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
