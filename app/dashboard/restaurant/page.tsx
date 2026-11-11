@@ -17,6 +17,7 @@ const LANGUAGES = [
 export default function RestaurantProfilePage() {
   const { loading, userId, restaurant, refresh } = useOwner();
   const [welcome, setWelcome] = useState(false);
+  const [trialPlan, setTrialPlan] = useState("pro");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -30,7 +31,11 @@ export default function RestaurantProfilePage() {
   });
 
   useEffect(() => {
-    setWelcome(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("welcome") === "1");
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    setWelcome(q.get("welcome") === "1");
+    const plan = q.get("plan");
+    if (plan && ["starter", "pro", "business", "free"].includes(plan)) setTrialPlan(plan);
   }, []);
 
   useEffect(() => {
@@ -93,7 +98,7 @@ export default function RestaurantProfilePage() {
 
     const { data, error: err } = restaurant
       ? await supabase.from("restaurants").update(payload).eq("id", restaurant.id).select("*").single()
-      : await supabase.from("restaurants").insert({ ...payload, owner_id: userId }).select("*").single();
+      : await supabase.from("restaurants").insert({ ...payload, owner_id: userId, trial_plan_slug: trialPlan }).select("*").single();
 
     if (err) {
       setBusy(false);
@@ -126,6 +131,36 @@ export default function RestaurantProfilePage() {
         <form onSubmit={onSubmit} className="space-y-5">
           <ErrorBox message={error} />
           <SuccessBox message={success} />
+          {!restaurant && (
+            <Card className="space-y-3">
+              <div>
+                <h2 className="font-heading text-base font-semibold text-ink">Start with a free 3-day trial</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Pick any paid plan and use every feature free for 3 days — no card required. When the trial
+                  ends you continue on Free (your menu and QR keep working) unless you upgrade. Pro is
+                  preselected: it's the most popular.
+                </p>
+              </div>
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { slug: "free", name: "Free", price: "PKR 0", note: "No trial — 5 items, basic menu" },
+                  { slug: "starter", name: "Starter", price: "PKR 2,999/mo", note: "Unlimited items, themes & styled QR" },
+                  { slug: "pro", name: "Pro", price: "PKR 4,999/mo", note: "Ordering, kitchen display, variations", badge: "MOST POPULAR" },
+                  { slug: "business", name: "Business", price: "PKR 8,999/mo", note: "Everything in Pro, for growing brands" },
+                ].map((p) => (
+                  <button key={p.slug} type="button" onClick={() => setTrialPlan(p.slug)}
+                    className={`rounded-xl border p-3.5 text-left transition ${trialPlan === p.slug ? "border-brand bg-brand-light/30 ring-2 ring-brand" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-heading text-sm font-bold text-ink">{p.name}</span>
+                      {p.badge && <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold text-white">{p.badge}</span>}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-semibold text-brand-dark">{p.slug === "free" ? p.price : `${p.price} · 3 days free`}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">{p.note}</span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
           <Card className="space-y-4">
             <h2 className="font-heading text-base font-semibold text-ink">Basics</h2>
             <div className="grid gap-4 sm:grid-cols-2">
