@@ -133,6 +133,25 @@ export interface OrderItem {
   created_at: string;
 }
 
+export type PaymentMethod = "jazzcash" | "easypaisa" | "bank" | "cash" | "other";
+
+export interface Payment {
+  id: string;
+  restaurant_id: string;
+  subscription_id: string | null;
+  plan_id: string | null;
+  amount: number;
+  currency: string;
+  method: PaymentMethod;
+  reference: string | null;
+  months: number;
+  starts_at: string;
+  ends_at: string | null;
+  note: string | null;
+  recorded_by: string | null;
+  created_at: string;
+}
+
 /** Shape returned by the get_customer_order RPC (customer's own view). */
 export interface CustomerOrder {
   id: string;

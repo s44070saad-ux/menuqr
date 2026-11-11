@@ -46,6 +46,24 @@ export function useOwner(): OwnerState {
             .eq("restaurant_id", restaurant.id)
             .single();
           subscription = (sub as Subscription) ?? null;
+          // Expiry rule (mirrors the DB's restaurant_plan_slug): a paid
+          // plan whose due date (ends_at) has passed behaves as Free —
+          // item limits, ordering access and plan labels all use the
+          // effective plan — until the Super Admin confirms a payment
+          // and sets a new due date.
+          if (subscription && subscription.ends_at
+              && new Date(subscription.ends_at).getTime() <= Date.now()
+              && subscription.plan && subscription.plan.slug !== "free") {
+            const { data: freePlan } = await supabase
+              .from("subscription_plans").select("*").eq("slug", "free").single();
+            if (freePlan) {
+              subscription = {
+                ...subscription,
+                status: "expired",
+                plan: freePlan as Subscription["plan"],
+              };
+            }
+          }
         }
         if (!cancelled) {
           setState({ loading: false, userId: u.user.id, profile: (profile as Profile) ?? null, restaurant, subscription, error: null });
