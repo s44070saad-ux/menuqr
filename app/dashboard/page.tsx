@@ -24,6 +24,7 @@ interface Stats {
   ordersToday: number; revenueToday: number;
   visits14: { label: string; count: number }[];
   qrVisits: number; linkVisits: number;
+  madeTotal: number; madeMonth: number; madeOrders: number; upsellTotal: number;
   recentOrders: RecentOrder[];
   popular: { id: string; name: string; price: number; views: number }[];
 }
@@ -49,7 +50,7 @@ export default function DashboardOverviewPage() {
         const rid = restaurant.id;
         const since14 = new Date(Date.now() - 13 * 24 * 3600 * 1000);
         since14.setHours(0, 0, 0, 0);
-        const [itemsRes, catsRes, todayRes, monthRes, totalRes, viewsRes, pendingRes, scans14Res, ordersTodayRes, recentRes] = await Promise.all([
+        const [itemsRes, catsRes, todayRes, monthRes, totalRes, viewsRes, pendingRes, scans14Res, ordersTodayRes, recentRes, allOrdersRes, upsellRes] = await Promise.all([
           supabase.from("menu_items").select("id, is_available").eq("restaurant_id", rid),
           supabase.from("categories").select("id", { count: "exact", head: true }).eq("restaurant_id", rid),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).gte("created_at", startOfTodayISO()),
@@ -60,6 +61,8 @@ export default function DashboardOverviewPage() {
           supabase.from("menu_scans").select("created_at, source").eq("restaurant_id", rid).gte("created_at", since14.toISOString()).order("created_at", { ascending: true }).limit(5000),
           supabase.from("orders").select("total_amount, status").eq("restaurant_id", rid).gte("created_at", startOfTodayISO()),
           supabase.from("orders").select("id, order_type, table_number, customer_name, total_amount, status, created_at").eq("restaurant_id", rid).order("created_at", { ascending: false }).limit(5),
+          supabase.from("orders").select("total_amount, status, created_at").eq("restaurant_id", rid).limit(5000),
+          supabase.from("order_items").select("subtotal, orders!inner(status)").eq("restaurant_id", rid).eq("via_upsell", true).limit(5000),
         ]);
         if (cancelled) return;
         const items = itemsRes.data ?? [];
@@ -107,6 +110,21 @@ export default function DashboardOverviewPage() {
             ordersToday: liveOrders.length,
             revenueToday: liveOrders.reduce((n, o) => n + Number(o.total_amount ?? 0), 0),
             visits14, qrVisits, linkVisits,
+            ...(() => {
+              // Phase 2.2: "Velora made you $X" — real orders rows only,
+              // cancelled/rejected excluded, same honesty rule as Admin.
+              const all = ((allOrdersRes.data ?? []) as { total_amount: number; status: string; created_at: string }[])
+                .filter((o) => !["cancelled", "rejected"].includes(o.status));
+              const monthStart = startOfMonthISO();
+              return {
+                madeTotal: all.reduce((n, o) => n + Number(o.total_amount ?? 0), 0),
+                madeOrders: all.length,
+                madeMonth: all.filter((o) => o.created_at >= monthStart).reduce((n, o) => n + Number(o.total_amount ?? 0), 0),
+                upsellTotal: ((upsellRes.data ?? []) as unknown as { subtotal: number; orders: { status: string } }[])
+                  .filter((r) => !["cancelled", "rejected"].includes(r.orders?.status ?? ""))
+                  .reduce((n, r) => n + Number(r.subtotal ?? 0), 0),
+              };
+            })(),
             recentOrders: (recentRes.data as RecentOrder[]) ?? [],
             popular,
           });
@@ -184,6 +202,20 @@ export default function DashboardOverviewPage() {
                   </span>
                   <ArrowRight size={18} className="shrink-0" />
                 </Link>
+              )}
+
+              {(subscription?.plan?.slug === "pro" || subscription?.plan?.slug === "business") && (
+                <div className="rounded-2xl bg-gradient-to-r from-teal-700 to-emerald-600 px-5 py-4 text-white shadow-card">
+                  <p className="flex items-center gap-2 text-sm font-medium text-teal-100">
+                    <TrendingUp size={17} /> Velora made you
+                  </p>
+                  <p className="mt-1 font-heading text-3xl font-bold">{formatPrice(stats.madeTotal, restaurant.currency)}</p>
+                  <p className="mt-1 text-sm text-teal-50">
+                    from {stats.madeOrders} order{stats.madeOrders === 1 ? "" : "s"} placed through your Velora menu · {formatPrice(stats.madeMonth, restaurant.currency)} this month
+                    {stats.upsellTotal > 0 && <> · <strong>{formatPrice(stats.upsellTotal, restaurant.currency)}</strong> of it came from "Pairs well with" suggestions</>}
+                  </p>
+                  <p className="mt-1 text-xs text-teal-200/80">Counted from your real orders only — cancelled orders excluded. Marketplace apps would have taken ~20–30% of this in commission.</p>
+                </div>
               )}
 
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
