@@ -58,6 +58,7 @@ export interface RestaurantSettings {
   show_search: boolean;
   show_featured: boolean;
   enable_whatsapp: boolean;
+  enable_ordering: boolean;
   footer_text: string | null;
   created_at: string;
   updated_at: string;
@@ -94,9 +95,54 @@ export interface QrCode {
   id: string;
   restaurant_id: string;
   label: string;
+  kind: "main" | "table";
+  table_number: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export type OrderType = "dine_in" | "takeaway";
+export type OrderStatus = "pending" | "confirmed" | "completed" | "cancelled";
+
+export interface Order {
+  id: string;
+  restaurant_id: string;
+  qr_code_id: string | null;
+  order_type: OrderType;
+  table_number: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  note: string | null;
+  status: OrderStatus;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+  items?: OrderItem[];
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  restaurant_id: string;
+  menu_item_id: string | null;
+  item_name: string;
+  unit_price: number;
+  quantity: number;
+  subtotal: number;
+  created_at: string;
+}
+
+/** Shape returned by the get_customer_order RPC (customer's own view). */
+export interface CustomerOrder {
+  id: string;
+  status: OrderStatus;
+  order_type: OrderType;
+  table_number: string | null;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+  items: { item_name: string; unit_price: number; quantity: number; subtotal: number }[];
 }
 
 export interface Subscription {
@@ -116,6 +162,9 @@ export interface MenuScan {
   restaurant_id: string;
   qr_code_id: string | null;
   user_agent: string | null;
+  source: "qr" | "link";
+  table_number: string | null;
+  visitor_id: string | null;
   created_at: string;
 }
 

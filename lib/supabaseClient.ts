@@ -26,3 +26,15 @@ export function menuUrlFor(slug: string): string {
   const base = SITE_URL || (typeof window !== "undefined" ? window.location.origin : "");
   return `${base}/menu/${slug}`;
 }
+
+/**
+ * QR URL for the main code (?src=qr marks a true QR scan in analytics)
+ * and for a table code (?src=qr&table=N pre-fills the dine-in table).
+ * The slug path never changes, so printed codes stay permanent.
+ */
+export function qrUrlFor(slug: string, tableNumber?: string | null): string {
+  const base = menuUrlFor(slug);
+  const params = new URLSearchParams({ src: "qr" });
+  if (tableNumber) params.set("table", tableNumber);
+  return `${base}?${params.toString()}`;
+}
