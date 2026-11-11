@@ -76,7 +76,7 @@ export default function SubscriptionPage() {
           <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
             <Info size={18} className="mt-0.5 shrink-0" />
             <p>
-              Online payments are not connected yet. To upgrade, contact the MenuQR team, complete your
+              Online payments are not connected yet. To upgrade, contact the Velora team, complete your
               payment, and the platform admin will activate your plan manually — usually the same day.
               A plan is never marked paid without a verified payment.
             </p>
