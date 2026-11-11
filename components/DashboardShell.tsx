@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Store, FolderTree, UtensilsCrossed, QrCode, BarChart3,
   CreditCard, Menu, X, MoreHorizontal, Home, LogOut, Loader2, ShieldCheck, ClipboardList, ChefHat,
+  Sparkles,
 } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { NotConfigured } from "./ui";
@@ -46,6 +47,7 @@ export default function DashboardShell({ title, children }: { title: string; chi
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [planChip, setPlanChip] = useState<{ name: string; suffix: string | null } | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -62,6 +64,35 @@ export default function DashboardShell({ title, children }: { title: string; chi
     })();
     return () => { cancelled = true; };
   }, [router]);
+
+  // Plan chip for the sidebar/drawer footer: the user's restaurant plan,
+  // with trial countdown when trialing. Mirrors the owner app's expiry
+  // rule (an expired paid plan presents as Free).
+  useEffect(() => {
+    if (!supabase || !profile) return;
+    let cancelled = false;
+    (async () => {
+      const { data: m } = await supabase.from("restaurant_members")
+        .select("restaurant_id").eq("user_id", profile.id).limit(1);
+      const rid = (m as { restaurant_id: string }[] | null)?.[0]?.restaurant_id;
+      if (!rid || cancelled) return;
+      const { data: s } = await supabase.from("subscriptions")
+        .select("status, ends_at, plan:subscription_plans(name, slug)")
+        .eq("restaurant_id", rid).single();
+      if (cancelled || !s) return;
+      const sub = s as unknown as { status: string; ends_at: string | null; plan: { name: string; slug: string } | null };
+      const slug = sub.plan?.slug ?? "free";
+      const expired = Boolean(sub.ends_at) && new Date(sub.ends_at!).getTime() <= Date.now() && slug !== "free";
+      if (expired) { setPlanChip({ name: "Free", suffix: "plan expired" }); return; }
+      if (sub.status === "trialing" && sub.ends_at) {
+        const d = Math.max(0, Math.ceil((new Date(sub.ends_at).getTime() - Date.now()) / 86400000));
+        setPlanChip({ name: sub.plan?.name ?? "Pro", suffix: `trial · ${d}d left` });
+        return;
+      }
+      setPlanChip({ name: sub.plan?.name ?? "Free", suffix: null });
+    })();
+    return () => { cancelled = true; };
+  }, [profile]);
 
   useEffect(() => { setDrawerOpen(false); }, [pathname]);
   useEffect(() => {
@@ -110,6 +141,13 @@ export default function DashboardShell({ title, children }: { title: string; chi
 
   const footer = (
     <div className="space-y-2 px-5 pb-5 pt-4">
+      {planChip && (
+        <Link href="/dashboard/subscription" className="flex min-h-[44px] items-center gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-sm text-white hover:bg-white/15 lg:min-h-0">
+          {planChip.suffix?.startsWith("trial") ? <Sparkles size={17} className="shrink-0 text-amber-300" /> : <CreditCard size={17} className="shrink-0 text-amber-300" />}
+          <span className="font-medium">{planChip.name} plan</span>
+          {planChip.suffix && <span className="ml-auto shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-200">{planChip.suffix}</span>}
+        </Link>
+      )}
       {profile && (
         <div className="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand font-heading text-sm font-semibold text-white">
