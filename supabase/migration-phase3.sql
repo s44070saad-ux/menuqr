@@ -122,7 +122,7 @@ create or replace function public.preview_discount(
 ) returns jsonb
 language plpgsql security definer set search_path = public stable as $$
 declare
-  v_coupon record;
+  v_coupon public.coupons%rowtype;
   v_gc record;
 begin
   if p_code is null or btrim(p_code) = '' then
@@ -215,7 +215,7 @@ declare
   v_local_dow int;
   v_disc numeric := 0;
   v_base numeric := 0;
-  v_coupon record;
+  v_coupon public.coupons%rowtype;
   v_discount numeric := 0;
   v_after numeric := 0;
   v_payable numeric := 0;
@@ -472,7 +472,10 @@ begin
          gift_card_amount = v_gc_apply
    where id = v_order_id;
 
-  if v_coupon.id is not null and v_discount > 0 then
+  -- v_discount > 0 only when a coupon row was found and applied
+  -- (v_coupon is assigned on that path only — never touch it here
+  -- without the discount guard: an unassigned record raises 55000).
+  if v_discount > 0 then
     update public.coupons set times_redeemed = times_redeemed + 1 where id = v_coupon.id;
   end if;
 
