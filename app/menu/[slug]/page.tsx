@@ -54,6 +54,8 @@ const STR: Record<Lang, Record<string, string>> = {
     newOrder: "Start a new order", loadingStatus: "Loading your order status…", tapStatus: "Tap to check its status",
     notifyWa: "Send order to restaurant on WhatsApp", customize: "Customize your dish",
     required: "Required", chooseOne: "Choose one", chooseMany: "Choose any",
+    stepReceived: "Received", stepPreparing: "Preparing", stepReady: "Ready",
+    readyBy: "Ready by about", readyNow: "Should be ready now — please check at the counter.",
     statusPending: "Waiting for confirmation", statusConfirmed: "Confirmed — being prepared",
     statusCompleted: "Completed", statusCancelled: "Cancelled by the restaurant",
     pendingMsg: "The restaurant has received your order. Keep this page open — it updates automatically when they confirm.",
@@ -86,6 +88,8 @@ const STR: Record<Lang, Record<string, string>> = {
     newOrder: "نیا آرڈر شروع کریں", loadingStatus: "آپ کے آرڈر کی صورتحال لوڈ ہو رہی ہے…", tapStatus: "صورتحال دیکھنے کے لیے دبائیں",
     notifyWa: "آرڈر ریسٹورنٹ کو واٹس ایپ پر بھیجیں", customize: "اپنی پسند منتخب کریں",
     required: "لازمی", chooseOne: "ایک منتخب کریں", chooseMany: "کوئی بھی منتخب کریں",
+    stepReceived: "موصول ہو گیا", stepPreparing: "تیار ہو رہا ہے", stepReady: "تیار ہے",
+    readyBy: "تقریباً اس وقت تک تیار ہوگا", readyNow: "اب تیار ہونا چاہیے — براہ کرم کاؤنٹر پر معلوم کریں۔",
     statusPending: "تصدیق کا انتظار ہے", statusConfirmed: "تصدیق ہو گئی — تیار کیا جا رہا ہے",
     statusCompleted: "مکمل ہو گیا", statusCancelled: "ریسٹورنٹ نے منسوخ کر دیا",
     pendingMsg: "ریسٹورنٹ کو آپ کا آرڈر مل گیا ہے۔ یہ صفحہ کھلا رکھیں — تصدیق ہوتے ہی اپڈیٹ ہو جائے گا۔",
@@ -286,6 +290,19 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     const { data } = await supabase.rpc("get_customer_order", {
       p_order_id: myOrderCreds.id, p_token: myOrderCreds.token,
     });
+    if (!data) {
+      // The order row is gone (e.g. removed by the restaurant) — stop
+      // tracking it instead of polling forever.
+      setMyOrder(null);
+      setMyOrderCreds(null);
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("menuqr_order_")) localStorage.removeItem(k);
+        }
+      } catch { /* ignore */ }
+      return;
+    }
     if (data) {
       const ord = data as CustomerOrder;
       setMyOrder((prev) => {
@@ -825,6 +842,39 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         {myOrder.status === "cancelled" && t.cancelledMsg}
                       </p>
                     </div>
+                    {myOrder.status !== "cancelled" && (() => {
+                      const prep = Number(settings?.prep_time_minutes ?? 20);
+                      const eta = new Date(new Date(myOrder.updated_at).getTime() + prep * 60000);
+                      const fmtT = (d: Date) => d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
+                      const steps = [
+                        { label: t.stepReceived, time: fmtT(new Date(myOrder.created_at)), state: "done" as const },
+                        { label: t.stepPreparing, time: myOrder.status === "confirmed" ? fmtT(new Date(myOrder.updated_at)) : "", state: (myOrder.status === "confirmed" ? "current" : myOrder.status === "completed" ? "done" : "todo") as "done" | "current" | "todo" },
+                        { label: t.stepReady, time: myOrder.status === "completed" ? fmtT(new Date(myOrder.updated_at)) : "", state: (myOrder.status === "completed" ? "done" : "todo") as "done" | "current" | "todo" },
+                      ];
+                      return (
+                        <div className="mt-4">
+                          <ol className="flex items-start" aria-label="Order progress">
+                            {steps.map((st, i) => (
+                              <li key={st.label} className="relative flex flex-1 flex-col items-center text-center">
+                                {i > 0 && <span className={`absolute top-[13px] h-0.5 w-1/2 ${rtl ? "right-1/2" : "left-0"} ${steps[i - 1].state === "done" ? "" : "opacity-30"}`} style={{ background: accent }} />}
+                                {i < steps.length - 1 && <span className={`absolute top-[13px] h-0.5 w-1/2 ${rtl ? "left-0" : "right-0"} ${st.state === "done" ? "" : "opacity-30"}`} style={{ background: accent }} />}
+                                <span className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-white ${st.state === "todo" ? (dark ? "bg-neutral-700" : "bg-slate-300") : ""} ${st.state === "current" ? "animate-pulse" : ""}`}
+                                  style={st.state !== "todo" ? { background: accent } : undefined}>
+                                  {st.state === "done" ? <Check size={15} /> : <span className="h-2 w-2 rounded-full bg-white" />}
+                                </span>
+                                <span className={`mt-1.5 text-xs font-semibold ${st.state === "todo" ? (dark ? "text-neutral-500" : "text-slate-400") : ""}`}>{st.label}</span>
+                                {st.time && <span className={`text-[11px] ${dark ? "text-neutral-500" : "text-slate-400"}`}>{st.time}</span>}
+                              </li>
+                            ))}
+                          </ol>
+                          {myOrder.status === "confirmed" && (
+                            <p className="mt-2 text-center text-sm font-medium" style={{ color: accent }}>
+                              {Date.now() < eta.getTime() ? `${t.readyBy} ${fmtT(eta)}` : t.readyNow}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <ul className="mt-4 space-y-2 text-sm">
                       {myOrder.items.map((oi, i) => (
                         <li key={i}>
