@@ -19,7 +19,7 @@ const EMPTY: ItemForm = { name: "", description: "", price: "", discount_price: 
 export default function MenuItemsPage() {
   const { loading, userId, restaurant, subscription } = useOwner();
   const plan = subscription?.plan ?? null;
-  const maxItems = plan?.max_items ?? null; // null = unlimited (FREE default plan sets 15 in schema)
+  const maxItems = plan?.max_items ?? null; // null = unlimited (Free plan sets 5 in the DB)
 
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
