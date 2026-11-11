@@ -26,7 +26,7 @@ export default function RestaurantProfilePage() {
     name: "", slug: "", description: "", address: "", phone: "", whatsapp: "",
     opening_hours: "", currency: "PKR", default_language: "en",
     theme: "light", accent_color: "#0F766E", logo_url: "", cover_url: "",
-    is_published: true,
+    is_published: true, menu_theme: "classic",
   });
 
   useEffect(() => {
@@ -44,8 +44,20 @@ export default function RestaurantProfilePage() {
         default_language: restaurant.default_language, theme: restaurant.theme,
         accent_color: restaurant.accent_color, logo_url: restaurant.logo_url ?? "",
         cover_url: restaurant.cover_url ?? "", is_published: restaurant.is_published,
+        menu_theme: "classic",
       });
     }
+  }, [restaurant]);
+
+  // Menu theme lives on restaurant_settings — load the saved value.
+  useEffect(() => {
+    if (!supabase || !restaurant) return;
+    (async () => {
+      const { data } = await supabase.from("restaurant_settings")
+        .select("menu_theme").eq("restaurant_id", restaurant.id).single();
+      const mt = (data as { menu_theme?: string } | null)?.menu_theme;
+      if (mt) setForm((f) => ({ ...f, menu_theme: mt }));
+    })();
   }, [restaurant]);
 
   const set = (k: keyof typeof form, v: string | boolean) => {
@@ -95,7 +107,7 @@ export default function RestaurantProfilePage() {
     // the restaurant row, but settings stay consistent for future features).
     if (data) {
       await supabase.from("restaurant_settings")
-        .update({ theme: form.theme, primary_color: form.accent_color })
+        .update({ theme: form.theme, primary_color: form.accent_color, menu_theme: form.menu_theme })
         .eq("restaurant_id", data.id);
     }
     setBusy(false);
@@ -178,11 +190,21 @@ export default function RestaurantProfilePage() {
                 </select>
               </div>
               <div>
-                <label className={labelCls} htmlFor="theme">Menu theme</label>
+                <label className={labelCls} htmlFor="theme">Light / dark</label>
                 <select id="theme" className={inputCls} value={form.theme} onChange={(e) => set("theme", e.target.value)}>
                   <option value="light">Light</option>
                   <option value="dark">Dark</option>
                 </select>
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="menu_theme">Menu design theme</label>
+                <select id="menu_theme" className={inputCls} value={form.menu_theme} onChange={(e) => set("menu_theme", e.target.value)}>
+                  <option value="classic">Classic — clean light/dark</option>
+                  <option value="midnight">Midnight — premium dark</option>
+                  <option value="fresh">Fresh — soft green</option>
+                  <option value="royal">Royal — warm ivory</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Design themes are a Starter+ feature — Free menus always use Classic.</p>
               </div>
               <div>
                 <label className={labelCls} htmlFor="accent">Accent colour</label>
