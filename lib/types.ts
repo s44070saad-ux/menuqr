@@ -68,6 +68,8 @@ export interface RestaurantSettings {
   tax_percent?: number;
   service_percent?: number;
   min_order_amount?: number;
+  /** Phase 1.5: typical minutes from confirmation to ready (ETA). */
+  prep_time_minutes?: number;
   qr_color: string;
   card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
