@@ -1,0 +1,315 @@
+"use client";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Store, ClipboardList, Phone, Check, CheckCheck, X, Lock, RefreshCw, BellRing,
+} from "lucide-react";
+import DashboardShell from "@/components/DashboardShell";
+import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnPrimary } from "@/components/ui";
+import { supabase } from "@/lib/supabaseClient";
+import { useOwner } from "@/lib/useOwner";
+import { formatPrice, startOfTodayISO } from "@/lib/utils";
+import type { Order, OrderStatus } from "@/lib/types";
+
+const ORDERING_PLANS = ["pro", "business"];
+type Filter = "all" | OrderStatus;
+
+export default function OrdersPage() {
+  const { loading, restaurant, subscription } = useOwner();
+  const planSlug = subscription?.plan?.slug ?? "free";
+  const planAllows = ORDERING_PLANS.includes(planSlug);
+
+  const [fetching, setFetching] = useState(true);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [orderingOn, setOrderingOn] = useState<boolean | null>(null);
+  const [savingToggle, setSavingToggle] = useState(false);
+  const seenIds = useRef<Set<string> | null>(null);
+  const audioRef = useRef<AudioContext | null>(null);
+
+  const load = useCallback(async (quiet = false) => {
+    if (!supabase || !restaurant) return;
+    if (!quiet) setFetching(true);
+    const { data, error: err } = await supabase
+      .from("orders")
+      .select("*, items:order_items(*)")
+      .eq("restaurant_id", restaurant.id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (err) { setError(err.message); setFetching(false); return; }
+    const list = (data as Order[]) ?? [];
+    // Sound for genuinely new pending orders (after the first load).
+    if (seenIds.current) {
+      const fresh = list.filter((o) => o.status === "pending" && !seenIds.current!.has(o.id));
+      if (fresh.length > 0) beep();
+    }
+    seenIds.current = new Set(list.map((o) => o.id));
+    setOrders(list);
+    setFetching(false);
+  }, [restaurant]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Live updates: realtime when available + 10s polling fallback.
+  useEffect(() => {
+    if (!supabase || !restaurant) return;
+    const sb = supabase;
+    const channel = sb
+      .channel(`orders-${restaurant.id}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "orders", filter: `restaurant_id=eq.${restaurant.id}` },
+        () => load(true))
+      .subscribe();
+    const t = setInterval(() => load(true), 10000);
+    return () => { sb.removeChannel(channel); clearInterval(t); };
+  }, [restaurant, load]);
+
+  // Ordering on/off toggle (restaurant_settings.enable_ordering).
+  useEffect(() => {
+    if (!supabase || !restaurant) return;
+    (async () => {
+      const { data } = await supabase.from("restaurant_settings")
+        .select("enable_ordering").eq("restaurant_id", restaurant.id).single();
+      setOrderingOn(Boolean((data as { enable_ordering?: boolean } | null)?.enable_ordering ?? true));
+    })();
+  }, [restaurant]);
+
+  async function toggleOrdering(next: boolean) {
+    if (!supabase || !restaurant || savingToggle) return;
+    setSavingToggle(true);
+    setError(null);
+    const { error: err } = await supabase.from("restaurant_settings")
+      .update({ enable_ordering: next }).eq("restaurant_id", restaurant.id);
+    if (err) setError(err.message);
+    else { setOrderingOn(next); setSuccess(next ? "Ordering is ON — customers can order from your menu." : "Ordering is OFF — customers can browse your menu but cannot order."); }
+    setSavingToggle(false);
+  }
+
+  function beep() {
+    try {
+      audioRef.current = audioRef.current ?? new AudioContext();
+      const ctx = audioRef.current;
+      [0, 0.25].forEach((offset) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.12, ctx.currentTime + offset);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.2);
+        osc.start(ctx.currentTime + offset);
+        osc.stop(ctx.currentTime + offset + 0.22);
+      });
+    } catch { /* sound is a nicety, never an error */ }
+  }
+
+  async function setStatus(order: Order, status: OrderStatus) {
+    if (!supabase || busyId) return;
+    setBusyId(order.id);
+    setError(null); setSuccess(null);
+    const { error: err } = await supabase.from("orders")
+      .update({ status }).eq("id", order.id).eq("restaurant_id", order.restaurant_id);
+    if (err) setError(err.message);
+    else {
+      setOrders((os) => os.map((o) => (o.id === order.id ? { ...o, status } : o)));
+      if (status === "confirmed") setSuccess("Order confirmed — the customer's phone updates automatically while their order page is open.");
+    }
+    setBusyId(null);
+  }
+
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: orders.length, pending: 0, confirmed: 0, completed: 0, cancelled: 0 };
+    orders.forEach((o) => { c[o.status] += 1; });
+    return c;
+  }, [orders]);
+
+  const todayStats = useMemo(() => {
+    const start = new Date(startOfTodayISO()).getTime();
+    const todays = orders.filter((o) => new Date(o.created_at).getTime() >= start && o.status !== "cancelled");
+    return { count: todays.length, revenue: todays.reduce((n, o) => n + Number(o.total_amount), 0) };
+  }, [orders]);
+
+  const visible = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+
+  return (
+    <DashboardShell title="Orders">
+      {loading ? <Loading label="Loading orders…" /> : !restaurant ? (
+        <EmptyState title="Set up your restaurant first" hint="Orders appear here once your restaurant exists and customers order from the menu."
+          action={<Link href="/dashboard/restaurant" className={btnPrimary}><Store size={18} /> Set up my restaurant</Link>} />
+      ) : !planAllows ? (
+        <Card className="py-10 text-center">
+          <Lock size={30} className="mx-auto text-slate-300" />
+          <p className="mt-3 font-heading text-lg font-semibold text-ink">Ordering is a Pro feature</p>
+          <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-slate-500">
+            Your current plan is <strong className="text-ink">{subscription?.plan?.name ?? "Free"}</strong>.
+            On Pro (PKR 2,499/month) and Business, customers can order directly from your menu —
+            dine-in by table QR or takeaway with their phone number — and you confirm orders here.
+          </p>
+          <Link href="/dashboard/subscription" className={`${btnPrimary} mt-5`}>See plans</Link>
+        </Card>
+      ) : (
+        <div className="space-y-5">
+          <ErrorBox message={error} />
+          <SuccessBox message={success} />
+
+          {/* Controls row */}
+          <Card className="flex flex-wrap items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-light/60 text-brand-dark"><BellRing size={19} /></span>
+            <div className="min-w-0 flex-1">
+              <p className="font-heading text-sm font-semibold text-ink">Ordering is {orderingOn ? "ON" : "OFF"}</p>
+              <p className="text-xs text-slate-500">
+                {orderingOn ? "Customers can add dishes and place orders from your public menu." : "Customers can browse, but the order buttons are hidden."}
+              </p>
+            </div>
+            <button type="button" role="switch" aria-checked={orderingOn ?? false} disabled={orderingOn === null || savingToggle}
+              onClick={() => toggleOrdering(!orderingOn)}
+              className={`relative h-8 w-14 shrink-0 rounded-full transition ${orderingOn ? "bg-brand" : "bg-slate-300"} disabled:opacity-50`}>
+              <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all ${orderingOn ? "left-7" : "left-1"}`} />
+            </button>
+            <button type="button" onClick={() => load()} className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
+              <RefreshCw size={15} /> Refresh
+            </button>
+          </Card>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <Card className="!p-4 text-center">
+              <p className="font-heading text-xl font-bold text-ink sm:text-2xl">{counts.pending}</p>
+              <p className="text-xs text-slate-500">Waiting to confirm</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <p className="font-heading text-xl font-bold text-ink sm:text-2xl">{todayStats.count}</p>
+              <p className="text-xs text-slate-500">Orders today</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <p className="font-heading text-xl font-bold text-ink sm:text-2xl">{formatPrice(todayStats.revenue, restaurant.currency)}</p>
+              <p className="text-xs text-slate-500">Order value today</p>
+            </Card>
+          </div>
+
+          {/* Filter tabs */}
+          <div className="no-scrollbar flex gap-2 overflow-x-auto">
+            {(["all", "pending", "confirmed", "completed", "cancelled"] as Filter[]).map((f) => (
+              <button key={f} type="button" onClick={() => setFilter(f)}
+                className={`min-h-[40px] shrink-0 rounded-full px-4 py-2 text-sm font-medium capitalize ${filter === f ? "bg-ink text-white" : "bg-white text-slate-600 shadow-card"}`}>
+                {f} · {counts[f]}
+              </button>
+            ))}
+          </div>
+
+          {/* Orders list */}
+          {fetching ? <Loading label="Loading orders…" /> : visible.length === 0 ? (
+            <EmptyState
+              title={filter === "all" ? "No orders yet" : `No ${filter} orders`}
+              hint={filter === "all"
+                ? "When a customer orders from your public menu (table QR for dine-in, or takeaway with a phone number), it appears here instantly. Confirm it and the customer's phone updates automatically."
+                : "Orders with this status will appear here."}
+            />
+          ) : (
+            <div className="space-y-3">
+              {visible.map((o) => (
+                <OrderCard key={o.id} order={o} currency={restaurant.currency} busy={busyId === o.id}
+                  onStatus={(s) => setStatus(o, s)} />
+              ))}
+            </div>
+          )}
+          <p className="text-xs leading-relaxed text-slate-400">
+            New orders play a sound and appear automatically on this page. When you confirm, the customer
+            sees “Confirmed — being prepared” on their phone while their order page is open. Payment is at
+            the counter — MenuQR does not take online payment for orders yet.
+          </p>
+        </div>
+      )}
+    </DashboardShell>
+  );
+}
+
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `${h}h ${mins % 60}m ago`;
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + " " +
+    new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+const STATUS_STYLES: Record<OrderStatus, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  confirmed: "bg-emerald-100 text-emerald-800",
+  completed: "bg-slate-100 text-slate-600",
+  cancelled: "bg-red-100 text-red-700",
+};
+
+function OrderCard({ order: o, currency, busy, onStatus }: {
+  order: Order; currency: string; busy: boolean; onStatus: (s: OrderStatus) => void;
+}) {
+  return (
+    <Card className={o.status === "pending" ? "ring-2 ring-amber-300" : ""}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${o.order_type === "dine_in" ? "bg-brand-light/70 text-brand-dark" : "bg-violet-100 text-violet-800"}`}>
+          {o.order_type === "dine_in" ? `🍽 Dine-in · Table ${o.table_number ?? "—"}` : "🛍 Takeaway"}
+        </span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${STATUS_STYLES[o.status]}`}>{o.status}</span>
+        <span className="ml-auto text-xs text-slate-400">{timeAgo(o.created_at)}</span>
+      </div>
+
+      {(o.customer_name || o.customer_phone) && (
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+          {o.customer_name && <span className="font-medium text-ink">{o.customer_name}</span>}
+          {o.customer_phone && (
+            <a href={`tel:${o.customer_phone}`} className="inline-flex items-center gap-1 font-medium text-brand underline">
+              <Phone size={14} /> {o.customer_phone}
+            </a>
+          )}
+        </p>
+      )}
+
+      <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
+        {(o.items ?? []).map((it) => (
+          <li key={it.id} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-slate-700">{it.item_name} <span className="text-slate-400">× {it.quantity}</span></span>
+            <span className="font-medium text-ink">{formatPrice(Number(it.subtotal), currency)}</span>
+          </li>
+        ))}
+      </ul>
+      {o.note && <p className="mt-2.5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">Note: {o.note}</p>}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <span className="font-heading text-base font-bold text-ink">{formatPrice(Number(o.total_amount), currency)}</span>
+        <span className="text-xs text-slate-400">pay at counter</span>
+        <span className="ml-auto flex flex-wrap gap-2">
+          {o.status === "pending" && (
+            <>
+              <button type="button" disabled={busy} onClick={() => onStatus("confirmed")}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                <Check size={16} /> Confirm order
+              </button>
+              <button type="button" disabled={busy} onClick={() => onStatus("cancelled")}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-600 disabled:opacity-50">
+                <X size={16} /> Reject
+              </button>
+            </>
+          )}
+          {o.status === "confirmed" && (
+            <>
+              <button type="button" disabled={busy} onClick={() => onStatus("completed")}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                <CheckCheck size={16} /> Mark completed
+              </button>
+              <button type="button" disabled={busy} onClick={() => onStatus("cancelled")}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-600 disabled:opacity-50">
+                <X size={16} /> Cancel
+              </button>
+            </>
+          )}
+          {(o.status === "completed" || o.status === "cancelled") && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-slate-400"><ClipboardList size={15} /> No actions — order is {o.status}.</span>
+          )}
+        </span>
+      </div>
+    </Card>
+  );
+}
