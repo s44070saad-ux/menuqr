@@ -516,10 +516,10 @@ create policy menuqr_images_delete on storage.objects for delete
 -- max_items NULL = unlimited.
 -- ---------------------------------------------------------------------
 insert into public.subscription_plans (slug, name, price_monthly, currency, max_items, max_restaurants, features, display_order) values
-  ('free',     'Free',     0,    'PKR', 5,   1,    '["5 menu items","1 restaurant","Basic QR code","Basic menu design","Platform branding"]'::jsonb, 1),
-  ('starter',  'Starter',  999,  'PKR', null, 1,    '["Unlimited menu items","Custom restaurant branding","QR code download (PNG + SVG)","Basic analytics"]'::jsonb, 2),
-  ('pro',      'Pro',      2499, 'PKR', null, 1,    '["Everything in Starter","Advanced analytics","Multiple menus (coming with plan)","Multiple QR codes","Extra menu customization"]'::jsonb, 3),
-  ('business', 'Business', 4999, 'PKR', null, null, '["Multiple restaurant branches","Branch management","Advanced analytics","Priority support"]'::jsonb, 4)
+  ('free',     'Free',     0,    'PKR', 5,    1,    '["5 menu items","1 restaurant","Basic QR code","Basic menu design","Platform branding"]'::jsonb, 1),
+  ('starter',  'Starter',  2999,  'PKR', null, 1,    '["Unlimited menu items","Custom restaurant branding","QR code download (PNG + SVG)","Basic analytics"]'::jsonb, 2),
+  ('pro',      'Pro',      4999, 'PKR', null, 1,    '["Everything in Starter","Advanced analytics","Multiple menus (coming with plan)","Multiple QR codes","Extra menu customization"]'::jsonb, 3),
+  ('business', 'Business', 8999, 'PKR', null, null, '["Multiple restaurant branches","Branch management","Advanced analytics","Priority support"]'::jsonb, 4)
 on conflict (slug) do update set
   name = excluded.name,
   price_monthly = excluded.price_monthly,
