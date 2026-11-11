@@ -74,7 +74,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell title="Create your free account" subtitle="Start with the Free plan: 15 menu items, 1 restaurant, permanent QR code.">
+    <AuthShell title="Create your free account" subtitle="Start with the Free plan: 5 menu items, 1 restaurant, permanent QR code.">
       <form onSubmit={onSubmit} className="space-y-4">
         <ErrorBox message={error} />
         <div>
