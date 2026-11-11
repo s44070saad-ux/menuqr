@@ -658,7 +658,7 @@ function Shell({ dark, children }: { dark: boolean; children: React.ReactNode })
   return (
     <div className={`min-h-screen font-body ${dark ? "bg-neutral-950 text-white" : "bg-[#F6F7F9] text-ink"}`}>
       {children}
-      <p className={`pb-6 text-center text-[11px] ${dark ? "text-neutral-600" : "text-slate-400"}`}>Powered by MenuQR</p>
+      <p className={`pb-6 text-center text-[11px] ${dark ? "text-neutral-600" : "text-slate-400"}`}>Powered by Velora</p>
     </div>
   );
 }
