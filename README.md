@@ -24,7 +24,7 @@ state (never fake/demo data) until the env vars are set.
 | Owner overview | `/dashboard` | Items, categories, scans today/month/total, availability, plan status, most-viewed items |
 | Restaurant profile | `/dashboard/restaurant` | Name, slug (unique, editable), description, logo + cover upload (Storage) or URL paste, address, phone, WhatsApp, hours, currency, language, theme + accent colour, publish toggle |
 | Categories | `/dashboard/categories` | Full CRUD, optional image, visibility, up/down reorder (`display_order`) |
-| Menu items | `/dashboard/items` | Full CRUD: name, description, price, discount price, photo upload/URL, category, availability + featured toggles, reorder, search/filter. **Free-plan 15-item limit enforced** from the subscription's plan |
+| Menu items | `/dashboard/items` | Full CRUD: name, description, price, discount price, photo upload/URL, category, availability + featured toggles, reorder, search/filter. **Free-plan 5-item limit enforced** from the subscription's plan |
 | QR code | `/dashboard/qr` | Permanent QR for `/menu/[slug]`, generated with the `qrcode` package; PNG + SVG download; printable table card (print CSS prints only the card) |
 | Analytics | `/dashboard/analytics` | Total/today/month scans, daily scans bar list (14 days), most-viewed items & categories. Views ≠ purchases — labelled as such |
 | Subscription | `/dashboard/subscription` | Current plan + usage vs limits + plan comparison. **No fake payments** — upgrades are activated manually by the Super Admin after verified payment |
