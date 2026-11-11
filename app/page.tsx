@@ -13,15 +13,15 @@ const PLANS = [
   },
   {
     name: "Starter", price: "PKR 999", period: "/month", highlight: true,
-    features: ["Unlimited menu items", "Custom restaurant branding", "QR download (PNG + SVG)", "Basic analytics"],
+    features: ["Unlimited menu items", "Custom restaurant branding", "QR code download (PNG + SVG)", "Basic analytics"],
   },
   {
     name: "Pro", price: "PKR 2,499", period: "/month", highlight: false,
-    features: ["Everything in Starter", "Advanced analytics", "Multiple QR codes", "Extra menu customization"],
+    features: ["Everything in Starter", "Advanced analytics", "Direct ordering (dine-in + takeaway)", "Table QR codes", "Live order dashboard", "Extra menu customization"],
   },
   {
     name: "Business", price: "PKR 4,999", period: "/month", highlight: false,
-    features: ["Multiple restaurant branches", "Branch management", "Advanced analytics", "Priority support"],
+    features: ["Everything in Pro", "Multiple restaurant branches", "Branch management", "Advanced analytics", "Priority support"],
   },
 ];
 
