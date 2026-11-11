@@ -125,8 +125,8 @@ export default function LandingPage() {
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-light/60 px-3 py-1 text-xs font-semibold text-brand-dark">
               <Wallet size={14} /> Free to start — no card, no setup fee
             </span>
-            <h1 className="mt-5 font-heading text-4xl font-bold leading-[1.08] sm:text-5xl lg:text-[3.4rem]">
-              Your menu, one scan away. <span className="text-brand">Orders included.</span>
+            <h1 className="mt-5 font-heading text-[1.9rem] font-bold leading-[1.14] sm:text-5xl sm:leading-[1.08] lg:text-[3.4rem]">
+              Your menu, one scan away. <span className="whitespace-nowrap text-brand">Orders included.</span>
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0">
               A beautiful digital menu with a permanent QR code for every table — and on Pro,
