@@ -48,7 +48,7 @@ export default function LoginPage() {
         </button>
       </form>
       <p className="mt-5 text-center text-sm text-slate-500">
-        New to MenuQR? <Link href="/register" className="font-medium text-brand underline">Create a free account</Link>
+        New to Velora? <Link href="/register" className="font-medium text-brand underline">Create a free account</Link>
       </p>
     </AuthShell>
   );
