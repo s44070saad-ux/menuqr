@@ -67,6 +67,10 @@ const FAQS = [
     a: "No — zero. Velora is fully self-serve: register, add your menu, download your QR code and print it. Some providers charge PKR 28,000 just for “professional installation”; we think a menu you set up yourself in 5 minutes shouldn't cost that.",
   },
   {
+    q: "How does the 3-day free Pro trial work?",
+    a: "Automatically. The moment you create your restaurant, Pro switches on free for 3 days — ordering, kitchen display, variations & add-ons, everything. No card, no commitment. When the trial ends you continue on the Free plan (your menu and QR keep working), and if you pay for Pro before the trial ends, your paid time stacks on top of the remaining trial days.",
+  },
+  {
     q: "How do I pay for a paid plan?",
     a: "Pay by JazzCash, Easypaisa or bank transfer and send us the confirmation — our team activates your plan manually and sets your due date. No card is stored, and there is no automatic charge.",
   },
@@ -138,7 +142,7 @@ export default function LandingPage() {
               </Link>
             </div>
             <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
-              {["Live in about 5 minutes", "PKR pricing", "English + اردو", "0% order commission"].map((x) => (
+              {["Live in about 5 minutes", "3-day free Pro trial included", "PKR pricing", "English + اردو", "0% order commission"].map((x) => (
                 <li key={x} className="flex items-center gap-1.5"><Check size={15} className="text-brand" /> {x}</li>
               ))}
             </ul>
@@ -324,7 +328,7 @@ export default function LandingPage() {
       {/* Plans */}
       <section id="pricing" className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <h2 className="text-center font-heading text-2xl font-bold sm:text-3xl">Simple pricing in PKR</h2>
-        <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">Start free. Upgrade when your menu grows — paid plans are activated by our team after payment confirmation. No setup fee, no commission, cancel anytime.</p>
+        <p className="mx-auto mt-2 max-w-xl text-center text-slate-600">Every new restaurant starts with a <strong>free 3-day Pro trial</strong> — full ordering, kitchen display and variations, no card required. After that, stay on Free or upgrade; paid plans are activated by our team after payment confirmation. No setup fee, no commission, cancel anytime.</p>
         <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {PLANS.map((p) => (
             <div key={p.name} className={`flex flex-col rounded-2xl bg-white p-6 shadow-card ring-1 ring-slate-100 ${p.highlight ? "!ring-2 !ring-brand" : ""}`}>
