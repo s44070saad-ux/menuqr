@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChefHat, Check, CheckCheck, Clock3, Lock, Store, X } from "lucide-react";
+import { ChefHat, Check, CheckCheck, Clock3, Lock, Printer, Store, X } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
+import PrintTicket from "@/components/PrintTicket";
 import { EmptyState, ErrorBox, Loading, btnPrimary } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
@@ -24,6 +25,15 @@ export default function KitchenPage() {
 
   const [fetching, setFetching] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    if (!printOrder) return;
+    const t = setTimeout(() => window.print(), 80);
+    const clear = () => setPrintOrder(null);
+    window.addEventListener("afterprint", clear);
+    return () => { clearTimeout(t); window.removeEventListener("afterprint", clear); };
+  }, [printOrder]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const seenIds = useRef<Set<string> | null>(null);
@@ -127,25 +137,29 @@ export default function KitchenPage() {
             <BoardColumn title="New orders" icon={<Clock3 size={19} className="text-amber-500" />} emptyText="No new orders. New orders appear here with a sound.">
               {pending.map((o) => (
                 <KitchenCard key={o.id} order={o} currency={restaurant.currency} busy={busyId === o.id} highlight
-                  onStatus={(s) => setStatus(o, s)} />
+                  onStatus={(s) => setStatus(o, s)} onPrint={() => setPrintOrder(o)} />
               ))}
             </BoardColumn>
 
             <BoardColumn title="Preparing" icon={<ChefHat size={19} className="text-brand" />} emptyText="Nothing being prepared right now.">
               {preparing.map((o) => (
                 <KitchenCard key={o.id} order={o} currency={restaurant.currency} busy={busyId === o.id}
-                  onStatus={(s) => setStatus(o, s)} />
+                  onStatus={(s) => setStatus(o, s)} onPrint={() => setPrintOrder(o)} />
               ))}
             </BoardColumn>
 
             <BoardColumn title="Done today" icon={<CheckCheck size={19} className="text-slate-400" />} emptyText="Completed orders will stack here.">
               {done.map((o) => (
                 <KitchenCard key={o.id} order={o} currency={restaurant.currency} busy={busyId === o.id} muted
-                  onStatus={(s) => setStatus(o, s)} />
+                  onStatus={(s) => setStatus(o, s)} onPrint={() => setPrintOrder(o)} />
               ))}
             </BoardColumn>
           </div>
         </div>
+      )}
+      {printOrder && restaurant && (
+        <PrintTicket restaurantName={restaurant.name} currency={restaurant.currency}
+          order={printOrder} kind="kitchen" />
       )}
     </DashboardShell>
   );
@@ -173,9 +187,10 @@ function timeAgo(iso: string): string {
   return `${h}h ${mins % 60}m ago`;
 }
 
-function KitchenCard({ order: o, currency, busy, highlight = false, muted = false, onStatus }: {
+function KitchenCard({ order: o, currency, busy, highlight = false, muted = false, onStatus, onPrint }: {
   order: Order; currency: string; busy: boolean; highlight?: boolean; muted?: boolean;
   onStatus: (s: OrderStatus) => void;
+  onPrint: () => void;
 }) {
   const late = o.status !== "completed" && o.status !== "cancelled"
     && Date.now() - new Date(o.created_at).getTime() > 15 * 60000;
@@ -213,6 +228,10 @@ function KitchenCard({ order: o, currency, busy, highlight = false, muted = fals
       <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
         <span className="font-heading text-base font-bold text-ink">{formatPrice(Number(o.total_amount), currency)}</span>
         <span className="ml-auto flex gap-2">
+          <button type="button" onClick={onPrint}
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
+            <Printer size={15} /> Ticket
+          </button>
           {o.status === "pending" && (
             <>
               <button type="button" disabled={busy} onClick={() => onStatus("cancelled")}
