@@ -1,4 +1,4 @@
-# MenuQR — Setup & Deployment Guide
+# Velora — Setup & Deployment Guide
 
 Exact steps, in order. Everything uses free tiers. Budget ~20 minutes.
 Do **not** skip Step 2 — without the database schema nothing can save data.
@@ -42,7 +42,7 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
 ## Step 3 — Auth settings (email confirmation)
 
 - Default Supabase behaviour asks new users to confirm their email before
-  first login. MenuQR handles **both** settings correctly:
+  first login. Velora handles **both** settings correctly:
   the DB trigger creates the profile at signup, the app-side insert works
   with or without a session (see `profiles_insert_signup` in schema.sql).
 - For the smoothest testing, you may turn confirmation OFF:
@@ -71,7 +71,7 @@ From this folder (or upload via the GitHub web UI):
 ```bash
 git init
 git add .
-git commit -m "MenuQR SaaS MVP"
+git commit -m "Velora SaaS MVP"
 git branch -M main
 git remote add origin https://github.com/YOUR-USERNAME/menuqr.git
 git push -u origin main

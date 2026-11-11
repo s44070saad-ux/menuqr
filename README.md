@@ -1,4 +1,4 @@
-# MenuQR — Digital Menu & QR Code SaaS
+# Velora — Digital Menu & QR Code SaaS
 
 A multi-tenant SaaS that lets restaurants, cafes and hotels create a beautiful
 digital menu, publish it at a permanent link (`/menu/[slug]`), and share it with
