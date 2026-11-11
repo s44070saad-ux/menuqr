@@ -18,6 +18,7 @@ export default function AnalyticsPage() {
   const [total, setTotal] = useState(0);
   const [today, setToday] = useState(0);
   const [month, setMonth] = useState(0);
+  const [qrTotal, setQrTotal] = useState(0);
   const [days, setDays] = useState<DayBar[]>([]);
   const [topItems, setTopItems] = useState<Ranked[]>([]);
   const [topCats, setTopCats] = useState<Ranked[]>([]);
@@ -28,7 +29,7 @@ export default function AnalyticsPage() {
     (async () => {
       try {
         const rid = restaurant.id;
-        const [totalRes, todayRes, monthRes, scansRes, viewsRes, itemsRes, catsRes] = await Promise.all([
+        const [totalRes, todayRes, monthRes, scansRes, viewsRes, itemsRes, catsRes, qrRes] = await Promise.all([
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).gte("created_at", startOfTodayISO()),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).gte("created_at", startOfMonthISO()),
@@ -36,11 +37,13 @@ export default function AnalyticsPage() {
           supabase.from("item_views").select("menu_item_id, category_id").eq("restaurant_id", rid).limit(10000),
           supabase.from("menu_items").select("id, name").eq("restaurant_id", rid),
           supabase.from("categories").select("id, name").eq("restaurant_id", rid),
+          supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("source", "qr"),
         ]);
         if (cancelled) return;
         setTotal(totalRes.count ?? 0);
         setToday(todayRes.count ?? 0);
         setMonth(monthRes.count ?? 0);
+        setQrTotal(qrRes.count ?? 0);
 
         // Daily bars for the last 14 days (client-side bucketing).
         const buckets = new Map<string, number>();
@@ -88,28 +91,33 @@ export default function AnalyticsPage() {
       ) : (
         <div className="space-y-5">
           <ErrorBox message={error} />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Card className="!p-4 text-center">
               <ScanLine size={20} className="mx-auto text-brand" />
               <p className="mt-1.5 font-heading text-xl font-bold text-ink sm:text-2xl">{total}</p>
-              <p className="text-xs text-slate-500">Total scans</p>
+              <p className="text-xs text-slate-500">Total menu visits</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <ScanLine size={20} className="mx-auto text-brand" />
+              <p className="mt-1.5 font-heading text-xl font-bold text-ink sm:text-2xl">{qrTotal}</p>
+              <p className="text-xs text-slate-500">QR scans (all time)</p>
             </Card>
             <Card className="!p-4 text-center">
               <ScanLine size={20} className="mx-auto text-brand" />
               <p className="mt-1.5 font-heading text-xl font-bold text-ink sm:text-2xl">{today}</p>
-              <p className="text-xs text-slate-500">Scans today</p>
+              <p className="text-xs text-slate-500">Visits today</p>
             </Card>
             <Card className="!p-4 text-center">
               <ScanLine size={20} className="mx-auto text-brand" />
               <p className="mt-1.5 font-heading text-xl font-bold text-ink sm:text-2xl">{month}</p>
-              <p className="text-xs text-slate-500">Scans this month</p>
+              <p className="text-xs text-slate-500">Visits this month</p>
             </Card>
           </div>
 
           <Card>
-            <h2 className="font-heading text-base font-semibold text-ink">Daily scans — last 14 days</h2>
+            <h2 className="font-heading text-base font-semibold text-ink">Daily menu visits — last 14 days</h2>
             {days.every((d) => d.count === 0) ? (
-              <p className="mt-3 text-sm text-slate-500">No scans in the last 14 days yet. Print your QR card and put it on your tables — scans are recorded every time a customer opens your menu.</p>
+              <p className="mt-3 text-sm text-slate-500">No visits in the last 14 days yet. Print your QR card and put it on your tables — a visit is recorded the first time a customer opens your menu (reopening it within 30 minutes is not counted again).</p>
             ) : (
               <ul className="mt-4 space-y-2">
                 {days.map((d) => (
@@ -132,7 +140,11 @@ export default function AnalyticsPage() {
 
           <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-400">
             <Eye size={14} className="mt-0.5 shrink-0" />
-            A “scan” is a visit to your public menu page and a “view” is a tap on a dish. They measure customer interest — they are not orders or purchases.
+            How counting works now: a “QR scan” means the menu was opened from one of your printed QR codes
+            (re-download them from the QR page — older prints still work but count as link visits). A “menu visit”
+            also includes direct/shared links. The same phone is counted at most once every 30 minutes, your own
+            visits as the restaurant owner are never counted, and a dish “view” counts once per dish per visit.
+            Older numbers were inflated because every page refresh counted. Visits measure interest — they are not orders.
           </p>
         </div>
       )}
