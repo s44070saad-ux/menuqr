@@ -129,6 +129,32 @@ begin
     (v_rest, v_cat, 'Mineral Water (1.5 L)', null, 150, 4),
     (v_rest, v_cat, 'Kashmiri Chai', 'Pink tea with crushed almonds and pistachio.', 300, 5);
 
+  -- ------------- Phase 1.1: allergens / dietary / calories -------------
+  update public.menu_items set allergens = '{milk}', dietary = '{halal}', calories = 640 where restaurant_id = v_rest and name = 'Chicken Wings (6 pcs)';
+  update public.menu_items set allergens = '{gluten,milk,eggs}', dietary = '{}', calories = 780 where restaurant_id = v_rest and name = 'Loaded Fries';
+  update public.menu_items set allergens = '{gluten,eggs,soy}', dietary = '{}', calories = 420 where restaurant_id = v_rest and name = 'Spring Rolls (4 pcs)';
+  update public.menu_items set allergens = '{milk}', dietary = '{halal,gluten_free}', calories = 540 where restaurant_id = v_rest and name = 'Chicken Tikka (Leg Quarter)';
+  update public.menu_items set allergens = '{milk}', dietary = '{halal,gluten_free}', calories = 520 where restaurant_id = v_rest and name = 'Chicken Malai Boti (8 pcs)';
+  update public.menu_items set allergens = '{}', dietary = '{halal,gluten_free}', calories = 610 where restaurant_id = v_rest and name = 'Beef Seekh Kabab (4 pcs)';
+  update public.menu_items set allergens = '{gluten,milk,mustard}', dietary = '{halal}', calories = 1450 where restaurant_id = v_rest and name = 'Spice Route BBQ Platter';
+  update public.menu_items set allergens = '{milk}', dietary = '{halal,gluten_free}', calories = 980 where restaurant_id = v_rest and name = 'Chicken Karahi';
+  update public.menu_items set allergens = '{milk}', dietary = '{halal,gluten_free}', calories = 1050 where restaurant_id = v_rest and name = 'Chicken White Karahi';
+  update public.menu_items set allergens = '{milk}', dietary = '{halal,gluten_free}', calories = 1180 where restaurant_id = v_rest and name = 'Mutton Handi';
+  update public.menu_items set allergens = '{milk}', dietary = '{vegetarian,halal,gluten_free}', calories = 560 where restaurant_id = v_rest and name = 'Daal Mash Fry';
+  update public.menu_items set allergens = '{milk,eggs,sulphites}', dietary = '{halal}', calories = 720 where restaurant_id = v_rest and name = 'Chicken Dum Biryani';
+  update public.menu_items set allergens = '{}', dietary = '{halal,gluten_free}', calories = 690 where restaurant_id = v_rest and name = 'Beef Pulao';
+  update public.menu_items set allergens = '{eggs,soy}', dietary = '{}', calories = 480 where restaurant_id = v_rest and name = 'Vegetable Fried Rice';
+  update public.menu_items set allergens = '{gluten,milk,sesame}', dietary = '{vegetarian,halal}', calories = 310 where restaurant_id = v_rest and name = 'Roghni Naan';
+  update public.menu_items set allergens = '{gluten,milk}', dietary = '{vegetarian,halal}', calories = 290 where restaurant_id = v_rest and name = 'Garlic Naan';
+  update public.menu_items set allergens = '{gluten}', dietary = '{vegetarian,halal,vegan}', calories = 240 where restaurant_id = v_rest and name = 'Tandoori Roti';
+  update public.menu_items set allergens = '{milk}', dietary = '{vegetarian,halal}', calories = 380 where restaurant_id = v_rest and name = 'Gulab Jamun (4 pcs)';
+  update public.menu_items set allergens = '{milk,nuts}', dietary = '{vegetarian,halal}', calories = 520 where restaurant_id = v_rest and name = 'Kulfa Falooda';
+  update public.menu_items set allergens = '{}', dietary = '{vegan,vegetarian,halal,gluten_free}', calories = 120 where restaurant_id = v_rest and name = 'Mint Margarita';
+  update public.menu_items set allergens = '{}', dietary = '{vegan,vegetarian,halal,gluten_free}', calories = 45 where restaurant_id = v_rest and name = 'Fresh Lime Soda';
+  update public.menu_items set allergens = '{}', dietary = '{vegan,vegetarian,halal,gluten_free}', calories = 140 where restaurant_id = v_rest and name = 'Soft Drink (Can)';
+  update public.menu_items set allergens = '{}', dietary = '{vegan,vegetarian,halal,gluten_free}', calories = 0 where restaurant_id = v_rest and name = 'Mineral Water (1.5 L)';
+  update public.menu_items set allergens = '{milk,nuts}', dietary = '{vegetarian,halal,gluten_free}', calories = 260 where restaurant_id = v_rest and name = 'Kashmiri Chai';
+
   raise notice 'Spice Route demo created: restaurant %', v_rest;
 end $$;
 
