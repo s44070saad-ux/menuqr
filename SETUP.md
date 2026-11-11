@@ -29,6 +29,11 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
    (`menu_scans.source` QR-vs-link, table number, visitor id). Safe to re-run.
    On the already-live project this migration is the ONLY SQL needed —
    schema.sql does not need to be re-run.
+6. **Then run the Admin v2 migration the same way:**
+   `supabase/migration-admin-v2.sql` adds the `payments` table (the Super
+   Admin's manual payment log) and makes `restaurant_plan_slug()` expiry-
+   aware, so a paid plan past its due date (`subscriptions.ends_at`)
+   behaves as Free until a new payment is confirmed in /admin.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
