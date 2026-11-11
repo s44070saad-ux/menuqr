@@ -144,7 +144,7 @@ export default function OrdersPage() {
           <p className="mt-3 font-heading text-lg font-semibold text-ink">Ordering is a Pro feature</p>
           <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-slate-500">
             Your current plan is <strong className="text-ink">{subscription?.plan?.name ?? "Free"}</strong>.
-            On Pro (PKR 2,499/month) and Business, customers can order directly from your menu —
+            On Pro (PKR 4,999/month) and Business, customers can order directly from your menu —
             dine-in by table QR or takeaway with their phone number — and you confirm orders here.
           </p>
           <Link href="/dashboard/subscription" className={`${btnPrimary} mt-5`}>See plans</Link>
