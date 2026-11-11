@@ -3,7 +3,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   UtensilsCrossed, FolderTree, ScanLine, CalendarDays, CheckCircle2, XCircle,
-  CreditCard, TrendingUp, ArrowRight, Store,
+  CreditCard, TrendingUp, ArrowRight, Store, ClipboardList, Banknote, Circle,
+  QrCode, Link2, Sparkles,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { Card, EmptyState, ErrorBox, Loading, btnPrimary } from "@/components/ui";
@@ -11,12 +12,29 @@ import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
 import { formatPrice, startOfMonthISO, startOfTodayISO } from "@/lib/utils";
 
+interface RecentOrder {
+  id: string; order_type: string; table_number: string | null;
+  customer_name: string | null; total_amount: number; status: string; created_at: string;
+}
+
 interface Stats {
   items: number; categories: number; available: number; unavailable: number;
   scansToday: number; scansMonth: number; scansTotal: number;
   pendingOrders: number;
+  ordersToday: number; revenueToday: number;
+  visits14: { label: string; count: number }[];
+  qrVisits: number; linkVisits: number;
+  recentOrders: RecentOrder[];
   popular: { id: string; name: string; price: number; views: number }[];
 }
+
+const ORDER_STATUS_META: Record<string, { label: string; cls: string }> = {
+  pending: { label: "Pending", cls: "bg-amber-100 text-amber-800" },
+  confirmed: { label: "Preparing", cls: "bg-sky-100 text-sky-700" },
+  completed: { label: "Completed", cls: "bg-emerald-100 text-emerald-700" },
+  cancelled: { label: "Cancelled", cls: "bg-slate-100 text-slate-500" },
+  rejected: { label: "Rejected", cls: "bg-red-100 text-red-700" },
+};
 
 export default function DashboardOverviewPage() {
   const { loading, restaurant, subscription, error } = useOwner();
@@ -29,7 +47,9 @@ export default function DashboardOverviewPage() {
     (async () => {
       try {
         const rid = restaurant.id;
-        const [itemsRes, catsRes, todayRes, monthRes, totalRes, viewsRes, pendingRes] = await Promise.all([
+        const since14 = new Date(Date.now() - 13 * 24 * 3600 * 1000);
+        since14.setHours(0, 0, 0, 0);
+        const [itemsRes, catsRes, todayRes, monthRes, totalRes, viewsRes, pendingRes, scans14Res, ordersTodayRes, recentRes] = await Promise.all([
           supabase.from("menu_items").select("id, is_available").eq("restaurant_id", rid),
           supabase.from("categories").select("id", { count: "exact", head: true }).eq("restaurant_id", rid),
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).gte("created_at", startOfTodayISO()),
@@ -37,6 +57,9 @@ export default function DashboardOverviewPage() {
           supabase.from("menu_scans").select("id", { count: "exact", head: true }).eq("restaurant_id", rid),
           supabase.from("item_views").select("menu_item_id").eq("restaurant_id", rid).limit(2000),
           supabase.from("orders").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "pending"),
+          supabase.from("menu_scans").select("created_at, source").eq("restaurant_id", rid).gte("created_at", since14.toISOString()).order("created_at", { ascending: true }).limit(5000),
+          supabase.from("orders").select("total_amount, status").eq("restaurant_id", rid).gte("created_at", startOfTodayISO()),
+          supabase.from("orders").select("id, order_type, table_number, customer_name, total_amount, status, created_at").eq("restaurant_id", rid).order("created_at", { ascending: false }).limit(5),
         ]);
         if (cancelled) return;
         const items = itemsRes.data ?? [];
@@ -53,6 +76,24 @@ export default function DashboardOverviewPage() {
             views: viewCounts.get(it.id as string) ?? 0,
           })).sort((a, b) => b.views - a.views);
         }
+        // 14-day visit buckets + QR/link split (real menu_scans rows only)
+        const buckets = new Map<string, number>();
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(since14.getTime() + i * 24 * 3600 * 1000);
+          buckets.set(d.toDateString(), 0);
+        }
+        let qrVisits = 0; let linkVisits = 0;
+        (scans14Res.data ?? []).forEach((s: { created_at: string; source: string | null }) => {
+          const key = new Date(s.created_at).toDateString();
+          if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
+          if (s.source === "qr") qrVisits++; else linkVisits++;
+        });
+        const visits14 = [...buckets.entries()].map(([day, count]) => ({
+          label: new Date(day).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+          count,
+        }));
+        const todaysOrders = (ordersTodayRes.data ?? []) as { total_amount: number; status: string }[];
+        const liveOrders = todaysOrders.filter((o) => !["cancelled", "rejected"].includes(o.status));
         if (!cancelled) {
           setStats({
             items: items.length,
@@ -63,6 +104,10 @@ export default function DashboardOverviewPage() {
             scansMonth: monthRes.count ?? 0,
             scansTotal: totalRes.count ?? 0,
             pendingOrders: pendingRes.count ?? 0,
+            ordersToday: liveOrders.length,
+            revenueToday: liveOrders.reduce((n, o) => n + Number(o.total_amount ?? 0), 0),
+            visits14, qrVisits, linkVisits,
+            recentOrders: (recentRes.data as RecentOrder[]) ?? [],
             popular,
           });
         }
@@ -72,6 +117,20 @@ export default function DashboardOverviewPage() {
     })();
     return () => { cancelled = true; };
   }, [restaurant]);
+
+  const trialDaysLeft = subscription?.status === "trialing" && subscription?.ends_at
+    ? Math.max(0, Math.ceil((new Date(subscription.ends_at).getTime() - Date.now()) / 86400000))
+    : null;
+
+  const checklist = restaurant ? [
+    { done: Boolean(restaurant.name && restaurant.phone && restaurant.address), label: "Add your phone & address", href: "/dashboard/restaurant" },
+    { done: Boolean(restaurant.logo_url), label: "Upload your logo", href: "/dashboard/restaurant" },
+    { done: (stats?.categories ?? 0) >= 1, label: "Create your first category", href: "/dashboard/categories" },
+    { done: (stats?.items ?? 0) >= 3, label: "Add at least 3 dishes", href: "/dashboard/items" },
+    { done: restaurant.is_published && restaurant.status === "published", label: "Publish your menu", href: "/dashboard/restaurant" },
+  ] : [];
+  const checklistDone = checklist.filter((c) => c.done).length;
+  const showChecklist = Boolean(restaurant && stats && checklistDone < checklist.length);
 
   return (
     <DashboardShell title="Overview">
@@ -87,14 +146,33 @@ export default function DashboardOverviewPage() {
       ) : (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-ink px-5 py-4 text-white shadow-card">
+            {restaurant.logo_url
+              ? <img src={restaurant.logo_url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
+              : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand font-heading text-lg font-bold">{restaurant.name.charAt(0).toUpperCase()}</span>}
             <div className="min-w-0">
-              <p className="truncate font-heading text-lg font-semibold">{restaurant.name}</p>
-              <p className="truncate text-sm text-slate-300">/menu/{restaurant.slug} · {restaurant.is_published && restaurant.status === "published" ? "Menu is live" : "Menu not published"}</p>
+              <p className="flex flex-wrap items-center gap-2 font-heading text-lg font-semibold">
+                <span className="truncate">{restaurant.name}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${restaurant.is_published && restaurant.status === "published" ? "bg-emerald-400/20 text-emerald-300" : "bg-white/10 text-slate-300"}`}>
+                  {restaurant.is_published && restaurant.status === "published" ? "● LIVE" : "Not published"}
+                </span>
+              </p>
+              <p className="truncate text-sm text-slate-300">/menu/{restaurant.slug}</p>
             </div>
             <Link href={`/menu/${restaurant.slug}`} target="_blank" className="ml-auto inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-white/10 px-3.5 py-2 text-sm font-medium hover:bg-white/20">
               View public menu <ArrowRight size={16} />
             </Link>
           </div>
+
+          {trialDaysLeft != null && (
+            <Link href="/dashboard/subscription" className="flex flex-wrap items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-4 text-amber-950 shadow-card">
+              <Sparkles size={22} className="shrink-0" />
+              <span className="min-w-0 flex-1 text-sm">
+                <strong className="font-heading text-base">Your {subscription?.plan?.name ?? "Pro"} free trial: {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left.</strong>{" "}
+                Every premium feature is unlocked right now — upgrade before it ends to keep them.
+              </span>
+              <span className="inline-flex min-h-[38px] items-center rounded-lg bg-ink px-3.5 py-2 text-sm font-semibold text-white">See plans <ArrowRight size={15} className="ml-1" /></span>
+            </Link>
+          )}
 
           {!stats ? <Loading label="Loading statistics…" /> : (
             <>
@@ -107,11 +185,93 @@ export default function DashboardOverviewPage() {
                   <ArrowRight size={18} className="shrink-0" />
                 </Link>
               )}
+
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <StatCard icon={UtensilsCrossed} label="Menu items" value={stats.items} sub={`${stats.available} available`} />
-                <StatCard icon={FolderTree} label="Categories" value={stats.categories} sub="on your menu" />
-                <StatCard icon={ScanLine} label="Menu visits today" value={stats.scansToday} sub={`${stats.scansMonth} this month`} />
-                <StatCard icon={CalendarDays} label="Total menu visits" value={stats.scansTotal} sub="QR scans + link visits" />
+                <StatCard icon={ScanLine} tone="bg-sky-100 text-sky-600" label="Menu visits today" value={stats.scansToday} sub={`${stats.scansMonth} this month · ${stats.scansTotal} all time`} />
+                <StatCard icon={ClipboardList} tone="bg-violet-100 text-violet-600" label="Orders today" value={stats.ordersToday} sub={stats.pendingOrders ? `${stats.pendingOrders} waiting for confirmation` : "no orders waiting"} />
+                <StatCard icon={Banknote} tone="bg-emerald-100 text-emerald-600" label="Order value today" value={formatPrice(stats.revenueToday, restaurant.currency)} sub="from real orders, excl. cancelled" />
+                <StatCard icon={UtensilsCrossed} tone="bg-brand-light/60 text-brand-dark" label="Menu items" value={stats.items} sub={`${stats.available} available · ${stats.categories} categories`} />
+              </div>
+
+              {showChecklist && (
+                <Card>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="font-heading text-base font-semibold text-ink">Getting started</h2>
+                    <span className="text-xs font-medium text-slate-500">{checklistDone} of {checklist.length} done</span>
+                    <div className="h-2 min-w-24 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${(checklistDone / checklist.length) * 100}%` }} />
+                    </div>
+                  </div>
+                  <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+                    {checklist.map((c) => (
+                      <li key={c.label}>
+                        <Link href={c.href} className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm ${c.done ? "text-slate-400" : "bg-appbg font-medium text-ink hover:bg-brand-light/40"}`}>
+                          {c.done ? <CheckCircle2 size={18} className="shrink-0 text-emerald-500" /> : <Circle size={18} className="shrink-0 text-slate-300" />}
+                          <span className={c.done ? "line-through" : ""}>{c.label}</span>
+                          {!c.done && <ArrowRight size={15} className="ml-auto shrink-0 text-brand" />}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink"><TrendingUp size={18} className="text-brand" /> Menu visits — last 14 days</h2>
+                  {stats.visits14.every((d) => d.count === 0) ? (
+                    <p className="mt-3 text-sm leading-relaxed text-slate-500">No visits yet in the last 14 days. Print your QR code and put it on tables — every scan and visit will chart here, counted once per visitor per 30 minutes.</p>
+                  ) : (
+                    <>
+                      <div className="mt-5 flex h-32 items-end gap-1.5">
+                        {stats.visits14.map((d, i) => {
+                          const max = Math.max(...stats.visits14.map((x) => x.count), 1);
+                          return (
+                            <div key={i} className="flex flex-1 flex-col items-center gap-1" title={`${d.label}: ${d.count} visits`}>
+                              <div className="w-full rounded-t-md bg-gradient-to-t from-brand-dark to-brand" style={{ height: `${Math.max(4, (d.count / max) * 100)}%` }} />
+                              <span className="text-[9px] font-medium text-slate-400">{i === 0 || i === 13 ? d.label.split(" ")[0] : ""}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
+                        <span className="flex items-center gap-1.5"><QrCode size={13} className="text-brand" /> QR scans: <strong className="text-ink">{stats.qrVisits}</strong></span>
+                        <span className="flex items-center gap-1.5"><Link2 size={13} className="text-brand" /> Link visits: <strong className="text-ink">{stats.linkVisits}</strong></span>
+                        <span>Total: <strong className="text-ink">{stats.qrVisits + stats.linkVisits}</strong> (14 days)</span>
+                      </div>
+                    </>
+                  )}
+                </Card>
+
+                <Card>
+                  <div className="flex items-center gap-2">
+                    <h2 className="flex items-center gap-2 font-heading text-base font-semibold text-ink"><ClipboardList size={18} className="text-brand" /> Recent orders</h2>
+                    <Link href="/dashboard/orders" className="ml-auto text-sm font-medium text-brand underline">Open Orders</Link>
+                  </div>
+                  {stats.recentOrders.length === 0 ? (
+                    <p className="mt-3 text-sm leading-relaxed text-slate-500">No orders yet. On Pro and Business, customers order straight from the menu — new orders appear here and on the Orders page in real time.</p>
+                  ) : (
+                    <ul className="mt-2 divide-y divide-slate-100">
+                      {stats.recentOrders.map((o) => {
+                        const meta = ORDER_STATUS_META[o.status] ?? { label: o.status, cls: "bg-slate-100 text-slate-600" };
+                        return (
+                          <li key={o.id} className="flex items-center gap-3 py-2.5 text-sm">
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium text-ink">
+                                {o.order_type === "dine_in" ? `Dine-in · Table ${o.table_number ?? "—"}` : `Takeaway · ${o.customer_name ?? "Customer"}`}
+                              </span>
+                              <span className="block text-xs text-slate-400">
+                                {new Date(o.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · {new Date(o.created_at).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}
+                              </span>
+                            </span>
+                            <span className="font-semibold text-ink">{formatPrice(Number(o.total_amount), restaurant.currency)}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </Card>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -121,9 +281,11 @@ export default function DashboardOverviewPage() {
                     <Row icon={<CheckCircle2 size={17} className="text-emerald-500" />} label="Available items" value={stats.available} />
                     <Row icon={<XCircle size={17} className="text-slate-400" />} label="Unavailable items" value={stats.unavailable} />
                     <Row icon={<CreditCard size={17} className="text-brand" />} label="Subscription"
-                      value={`${subscription?.plan?.name ?? "Free"} · ${subscription?.status ?? "active"}`} />
+                      value={`${subscription?.plan?.name ?? "Free"} · ${subscription?.status === "trialing" ? "free trial" : subscription?.status ?? "active"}`} />
                     <Row icon={<UtensilsCrossed size={17} className="text-brand" />} label="Plan item limit"
                       value={subscription?.plan?.max_items == null ? "Unlimited items" : `${stats.items} / ${subscription.plan.max_items} items used`} />
+                    <Row icon={<CalendarDays size={17} className="text-brand" />} label="Total menu visits" value={stats.scansTotal} />
+                    <Row icon={<FolderTree size={17} className="text-brand" />} label="Categories" value={stats.categories} />
                   </div>
                   <Link href="/dashboard/subscription" className="mt-4 inline-block text-sm font-medium text-brand underline">Manage subscription</Link>
                 </Card>
@@ -155,13 +317,13 @@ export default function DashboardOverviewPage() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub }: { icon: typeof ScanLine; label: string; value: number; sub: string }) {
+function StatCard({ icon: Icon, tone, label, value, sub }: { icon: typeof ScanLine; tone: string; label: string; value: React.ReactNode; sub: string }) {
   return (
     <Card className="!p-4">
-      <Icon size={22} className="text-brand" />
-      <p className="mt-2 font-heading text-2xl font-bold text-ink">{value}</p>
+      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tone}`}><Icon size={18} /></span>
+      <p className="mt-2.5 truncate font-heading text-2xl font-bold text-ink">{value}</p>
       <p className="text-sm font-medium text-slate-700">{label}</p>
-      <p className="text-xs text-slate-500">{sub}</p>
+      <p className="text-xs leading-snug text-slate-500">{sub}</p>
     </Card>
   );
 }
