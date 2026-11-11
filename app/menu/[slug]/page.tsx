@@ -10,6 +10,8 @@ import type {
   Category, CustomerOrder, ItemOption, ItemOptionGroup, MenuItem, Restaurant, RestaurantSettings,
 } from "@/lib/types";
 import { ALLERGENS, DIETARY, allergenLabel, dietaryLabel } from "@/lib/allergens";
+import { bestDiscountPct, effectivePrice, fmtTime12, itemWithinWindow } from "@/lib/schedules";
+import type { PriceSchedule } from "@/lib/types";
 
 /**
  * PUBLIC digital menu — the flagship page.
@@ -58,6 +60,7 @@ const STR: Record<Lang, Record<string, string>> = {
     enjoyedIt: "Enjoyed your meal?", rateGoogle: "Rate us on Google", privateFb: "Send private feedback",
     fbPlaceholder: "Tell the restaurant what you thought — only they will see this", fbSend: "Send feedback",
     fbThanks: "Thank you! Your feedback was sent to the restaurant.", fbError: "Could not send feedback. Please try again.",
+    happyHour: "Happy hour", availWindow: "Available {from} – {to}",
     reorderNote: "These items need your choices on the menu:",
     stepReceived: "Received", stepPreparing: "Preparing", stepReady: "Ready",
     readyBy: "Ready by about", readyNow: "Should be ready now — please check at the counter.",
@@ -97,6 +100,7 @@ const STR: Record<Lang, Record<string, string>> = {
     enjoyedIt: "کھانا پسند آیا؟", rateGoogle: "گوگل پر ریٹنگ دیں", privateFb: "پرائیویٹ فیڈبیک بھیجیں",
     fbPlaceholder: "ریستوراں کو بتائیں کھانا کیسا لگا — یہ صرف وہی دیکھیں گے", fbSend: "فیڈبیک بھیجیں",
     fbThanks: "شکریہ! آپ کا فیڈبیک ریسٹورنٹ کو بھیج دیا گیا ہے۔", fbError: "فیڈبیک نہیں بھیجا جا سکا۔ دوبارہ کوشش کریں۔",
+    happyHour: "ہیپی آور", availWindow: "دستیاب: {from} – {to}",
     reorderNote: "ان اشیاء کے لیے مینیو پر انتخاب درکار ہے:",
     stepReceived: "موصول ہو گیا", stepPreparing: "تیار ہو رہا ہے", stepReady: "تیار ہے",
     readyBy: "تقریباً اس وقت تک تیار ہوگا", readyNow: "اب تیار ہونا چاہیے — براہ کرم کاؤنٹر پر معلوم کریں۔",
@@ -136,6 +140,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [groupsByItem, setGroupsByItem] = useState<Map<string, GroupWithOptions[]>>(new Map());
   const [planSlug, setPlanSlug] = useState<string>("free");
   const [popularIds, setPopularIds] = useState<Set<string>>(new Set());
+  const [schedules, setSchedules] = useState<PriceSchedule[]>([]);
   const [reorderNote, setReorderNote] = useState<string | null>(null);
   const [fbOpen, setFbOpen] = useState(false);
   const [fbRating, setFbRating] = useState(0);
@@ -318,6 +323,11 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       }
 
       try {
+        const { data: sched } = await supabase.from("price_schedules").select("*").eq("restaurant_id", r.id);
+        if (!cancelled && Array.isArray(sched)) setSchedules(sched as PriceSchedule[]);
+      } catch { /* schedules are an enhancement — never break the menu */ }
+
+      try {
         const { data: avail } = await supabase.rpc("ordering_available", { rid: r.id });
         if (!cancelled) setOrdering(Boolean(avail));
       } catch { if (!cancelled) setOrdering(false); }
@@ -405,9 +415,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     return map;
   }, [filtered, categories]);
 
-  const priceOf = (it: MenuItem) =>
-    it.discount_price != null && Number(it.discount_price) < Number(it.price)
-      ? Number(it.discount_price) : Number(it.price);
+  const tz = settings?.timezone ?? "Asia/Karachi";
+  const priceOf = (it: MenuItem) => effectivePrice(it, schedules, tz);
+  const hhPctOf = (it: MenuItem) => bestDiscountPct(schedules, it, tz);
+  const withinWindow = (it: MenuItem) => itemWithinWindow(it, tz);
+  const windowLabel = (it: MenuItem) => (it.available_from && it.available_to)
+    ? t.availWindow.replace("{from}", fmtTime12(it.available_from)).replace("{to}", fmtTime12(it.available_to))
+    : null;
 
   const cartCount = lines.reduce((n, l) => n + l.qty, 0);
   const cartTotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
@@ -505,7 +519,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     const push = (id: string) => {
       if (out.length >= 4 || inCart.has(id)) return;
       const it = items.find((i) => i.id === id);
-      if (it && it.is_available && !out.some((o) => o.id === id)) out.push(it);
+      if (it && it.is_available && withinWindow(it) && !out.some((o) => o.id === id)) out.push(it);
     };
     for (const l of lines) for (const id of l.item.suggested_item_ids ?? []) push(id);
     for (const id of popularIds) push(id);
@@ -782,7 +796,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} featured onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
-                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
                       onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
@@ -800,7 +814,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                         expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                         ordering={ordering} qty={itemQty(item.id)}
-                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)}
+                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
                         onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                     ))}
                   </div>
@@ -816,7 +830,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
-                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
                       onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
@@ -896,7 +910,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
             {planAllowsUpsell && (() => {
               const sugs = (optItem.suggested_item_ids ?? [])
                 .map((id) => items.find((i) => i.id === id))
-                .filter((x): x is MenuItem => Boolean(x) && x!.is_available && x!.id !== optItem.id);
+                .filter((x): x is MenuItem => Boolean(x) && x!.is_available && withinWindow(x!) && x!.id !== optItem.id);
               if (sugs.length === 0) return null;
               return (
                 <div className="mt-5">
@@ -1253,19 +1267,24 @@ function Chip({ label, active, accent, dark, onClick }: { label: string; active:
   );
 }
 
-function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions, popular = false }: {
+function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions, popular = false, effPrice, hhPct = 0, hhLabel, availableNow, windowLabel }: {
   item: MenuItem; currency: string; accent: string; dark: boolean; t: Record<string, string>; lang: Lang;
   expanded: boolean; onTap: () => void; featured?: boolean;
   ordering: boolean; qty: number; hasOptions: boolean;
   onSimpleQty: (q: number) => void; onOptions: () => void; popular?: boolean;
+  effPrice?: number; hhPct?: number; hhLabel?: string; availableNow?: boolean; windowLabel?: string | null;
 }) {
-  const hasDiscount = item.discount_price != null && Number(item.discount_price) < Number(item.price);
+  const avail = availableNow ?? item.is_available;
+  const baseSell = item.discount_price != null && Number(item.discount_price) < Number(item.price) ? Number(item.discount_price) : Number(item.price);
+  const sell = effPrice != null ? effPrice : baseSell;
+  const hasDiscount = sell < Number(item.price);
   const priceBlock = (
-    <div className="flex items-baseline gap-1.5">
+    <div className="flex flex-wrap items-baseline gap-1.5">
       <span className="font-heading text-[15px] font-bold" style={{ color: accent }}>
-        {formatPrice(Number(hasDiscount ? item.discount_price : item.price), currency)}
+        {formatPrice(sell, currency)}
       </span>
       {hasDiscount && <span className={`text-xs line-through ${dark ? "text-neutral-500" : "text-slate-400"}`}>{formatPrice(Number(item.price), currency)}</span>}
+      {hhPct > 0 && <span className="rounded-full bg-teal-500/15 px-1.5 py-0.5 text-[10px] font-bold text-teal-600">{hhLabel} −{hhPct}%</span>}
     </div>
   );
 
@@ -1292,7 +1311,7 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
     </div>
   ) : null;
 
-  const addControl = ordering && item.is_available ? (
+  const addControl = ordering && avail ? (
     hasOptions ? (
       <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         <button type="button" onClick={onOptions}
@@ -1316,9 +1335,9 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
   if (featured) {
     return (
       <div onClick={onTap} role="button" tabIndex={0}
-        aria-label={`${item.name}, ${formatPrice(Number(hasDiscount ? item.discount_price : item.price), currency)}${item.is_available ? "" : `, ${t.unavailableShort}`}`}
+        aria-label={`${item.name}, ${formatPrice(sell, currency)}${avail ? "" : `, ${t.unavailableShort}`}`}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}
-        className={`fade-up cursor-pointer overflow-hidden rounded-2xl text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
+        className={`fade-up cursor-pointer overflow-hidden rounded-2xl text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${avail ? "" : "opacity-60"}`}>
         {item.image_url
           ? // eslint-disable-next-line @next/next/no-img-element
             <img src={item.image_url} alt={item.name} className="h-28 w-full object-cover" loading="lazy" />
@@ -1328,7 +1347,7 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
           {expanded && item.description && <p className={`mt-1 text-xs leading-relaxed ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>}
           <div className="mt-1.5">{priceBlock}</div>
           {metaBlock}
-          {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{t.unavailableShort}</span>}
+          {!avail && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{windowLabel ?? t.unavailableShort}</span>}
           {addControl}
         </div>
       </div>
@@ -1337,9 +1356,9 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
 
   return (
     <div onClick={onTap} role="button" tabIndex={0}
-      aria-label={`${item.name}, ${formatPrice(Number(hasDiscount ? item.discount_price : item.price), currency)}${item.is_available ? "" : `, ${t.unavailable}`}`}
+      aria-label={`${item.name}, ${formatPrice(sell, currency)}${avail ? "" : `, ${t.unavailable}`}`}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}
-      className={`fade-up flex w-full cursor-pointer gap-3 rounded-2xl p-3 text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
+      className={`fade-up flex w-full cursor-pointer gap-3 rounded-2xl p-3 text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${avail ? "" : "opacity-60"}`}>
       <div className="min-w-0 flex-1 py-0.5">
         <p className="flex items-center gap-1.5 text-[15px] font-semibold leading-snug">
           {item.name}
@@ -1350,7 +1369,7 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
         )}
         <div className="mt-2">{priceBlock}</div>
         {metaBlock}
-        {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{t.unavailable}</span>}
+        {!avail && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{windowLabel ?? t.unavailable}</span>}
         {addControl}
       </div>
       {item.image_url
