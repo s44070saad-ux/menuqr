@@ -269,9 +269,16 @@ function OrderCard({ order: o, currency, busy, onStatus }: {
 
       <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
         {(o.items ?? []).map((it) => (
-          <li key={it.id} className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-slate-700">{it.item_name} <span className="text-slate-400">× {it.quantity}</span></span>
-            <span className="font-medium text-ink">{formatPrice(Number(it.subtotal), currency)}</span>
+          <li key={it.id}>
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-slate-700">{it.item_name} <span className="text-slate-400">× {it.quantity}</span></span>
+              <span className="font-medium text-ink">{formatPrice(Number(it.subtotal), currency)}</span>
+            </div>
+            {it.options_snapshot && it.options_snapshot.length > 0 && (
+              <p className="mt-0.5 text-xs text-slate-400">
+                {it.options_snapshot.map((op) => `${op.group_name}: ${op.option_name}`).join(" · ")}
+              </p>
+            )}
           </li>
         ))}
       </ul>
