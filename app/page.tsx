@@ -3,7 +3,7 @@ import {
   QrCode, Smartphone, RefreshCw, BarChart3, Image as ImageIcon, ShieldCheck,
   Check, X, ArrowRight, Store, MousePointerClick, Printer, Globe, Zap, Wallet,
   ClipboardList, ChefHat, SlidersHorizontal, Palette, Languages, MessageCircle,
-  MousePointer2, Sparkles,
+  MousePointer2, Sparkles, Flame, TicketPercent, Users,
 } from "lucide-react";
 import HeroQr from "@/components/HeroQr";
 
@@ -41,6 +41,9 @@ const FEATURES = [
   { icon: ImageIcon, title: "Your branding, your photos", text: "Upload your logo, cover photo and food pictures. Choose a theme, light or dark, and your own accent colour." },
   { icon: Smartphone, title: "No app, no sign-up, no gate", text: "Customers scan and see your food instantly — no app download, no account, and no phone-number wall before the menu." },
   { icon: ShieldCheck, title: "Private & secure", text: "Every restaurant's data is isolated with database-level security, and plan limits are enforced in the database — not just hidden in the interface." },
+  { icon: Flame, title: "Smart upselling", text: "\"Pairs well with\" suggestions, Popular badges and one-tap reorder lift every order — and your dashboard shows exactly how much extra revenue upselling made you." },
+  { icon: TicketPercent, title: "Coupons, gift cards & loyalty", text: "Discount codes with real rules, prepaid gift cards, and a stamp-card loyalty programme your guests see filling up on their order-tracking page." },
+  { icon: Users, title: "Your customer database", text: "Every order builds your own customer list — names, phones, consented emails, spend history — exportable any time, plus win-back emails for guests who go quiet." },
 ];
 
 const STEPS = [
@@ -57,6 +60,9 @@ const COMPARE: { label: string; velora: string; qlinko: string; win?: boolean }[
   { label: "Your logo inside the QR code", velora: "Yes", qlinko: "No", win: true },
   { label: "Menu opens without a phone-number gate", velora: "Yes — food first", qlinko: "No — phone number first", win: true },
   { label: "Analytics", velora: "Real scans & orders from your restaurant", qlinko: "Dashboard demo figures", win: true },
+  { label: "Happy-hour pricing & time-based menus", velora: "Yes — scheduled % off, enforced by the server", qlinko: "Not available", win: true },
+  { label: "Coupons, gift cards & loyalty stamps", velora: "Yes (Pro)", qlinko: "Not available", win: true },
+  { label: "Customer database you own & can export", velora: "Yes — built automatically from orders", qlinko: "Not available", win: true },
   { label: "Kitchen display (KDS)", velora: "Yes (Pro)", qlinko: "Yes (Professional)" },
   { label: "Urdu menus", velora: "Yes", qlinko: "Yes" },
   { label: "Pro-level plan", velora: "PKR 4,999/mo", qlinko: "PKR 4,999/mo" },
