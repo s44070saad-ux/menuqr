@@ -41,6 +41,7 @@ export interface Restaurant {
   whatsapp: string | null;
   opening_hours: string | null;
   currency: string;
+  trial_plan_slug?: string | null;
   default_language: string;
   theme: ThemeMode;
   accent_color: string;
