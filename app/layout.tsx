@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const poppins = Poppins({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-poppins", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "MenuQR — Digital Menu & QR Code SaaS for Restaurants",
+  title: "Velora — Digital Menu & QR Code SaaS for Restaurants",
   description:
     "Create a beautiful digital menu for your restaurant, cafe or hotel. One permanent QR code, instant price updates, real scan analytics. Free to start.",
 };

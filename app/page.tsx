@@ -48,7 +48,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-white"><QrCode size={20} /></span>
-          <span className="font-heading text-lg font-semibold">MenuQR</span>
+          <span className="font-heading text-lg font-semibold">Velora</span>
           <nav className="ml-auto flex items-center gap-2">
             <Link href="/login" className="inline-flex min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:text-ink">Log in</Link>
             <Link href="/register" className="inline-flex min-h-[44px] items-center rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">Start free</Link>
@@ -173,7 +173,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-slate-100 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 text-center text-sm text-slate-500 sm:px-6">
-          <span className="flex items-center gap-2 font-heading font-semibold text-ink"><QrCode size={18} className="text-brand" /> MenuQR</span>
+          <span className="flex items-center gap-2 font-heading font-semibold text-ink"><QrCode size={18} className="text-brand" /> Velora</span>
           <p>Digital menus & QR codes for restaurants, cafes and hotels.</p>
           <div className="flex gap-4">
             <Link href="/login" className="hover:text-ink">Log in</Link>
