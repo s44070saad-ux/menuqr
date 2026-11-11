@@ -1,14 +1,16 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Loader2, Pencil, Plus, Search, Star, Store, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Pencil, Plus, Search, SlidersHorizontal, Star, Store, Trash2 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import ImageField from "@/components/ImageField";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnGhost, btnPrimary, inputCls, labelCls } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
 import { formatPrice } from "@/lib/utils";
-import type { Category, MenuItem } from "@/lib/types";
+import type { Category, ItemOption, ItemOptionGroup, MenuItem } from "@/lib/types";
+
+interface GroupWithOptions extends ItemOptionGroup { options: ItemOption[] }
 
 interface ItemForm {
   name: string; description: string; price: string; discount_price: string;
@@ -130,6 +132,98 @@ export default function MenuItemsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // ---------- Variations & add-ons (option groups) -------------------
+  const [optFor, setOptFor] = useState<MenuItem | null>(null);
+  const [optGroups, setOptGroups] = useState<GroupWithOptions[]>([]);
+  const [optLoading, setOptLoading] = useState(false);
+  const [groupForm, setGroupForm] = useState({ name: "", selection_type: "single" as "single" | "multi", is_required: false });
+  const [optionForms, setOptionForms] = useState<Record<string, { name: string; price: string }>>({});
+
+  async function loadOptions(item: MenuItem) {
+    if (!supabase) return;
+    setOptLoading(true);
+    const { data: groups, error: gErr } = await supabase.from("item_option_groups")
+      .select("*").eq("menu_item_id", item.id)
+      .order("display_order", { ascending: true }).order("created_at", { ascending: true });
+    if (gErr) { setError(gErr.message); setOptLoading(false); return; }
+    const gs = (groups as ItemOptionGroup[]) ?? [];
+    let all: ItemOption[] = [];
+    if (gs.length > 0) {
+      const { data: opts } = await supabase.from("item_options")
+        .select("*").in("group_id", gs.map((g) => g.id))
+        .order("display_order", { ascending: true }).order("created_at", { ascending: true });
+      all = (opts as ItemOption[]) ?? [];
+    }
+    setOptGroups(gs.map((g) => ({ ...g, options: all.filter((o) => o.group_id === g.id) })));
+    setOptLoading(false);
+  }
+
+  function toggleOptionsPanel(item: MenuItem) {
+    if (optFor?.id === item.id) { setOptFor(null); return; }
+    setOptFor(item);
+    setGroupForm({ name: "", selection_type: "single", is_required: false });
+    loadOptions(item);
+  }
+
+  async function addGroup() {
+    if (!supabase || !restaurant || !optFor) return;
+    if (!groupForm.name.trim()) { setError("Give the option group a name, e.g. Size or Extras."); return; }
+    setError(null);
+    const { error: err } = await supabase.from("item_option_groups").insert({
+      restaurant_id: restaurant.id, menu_item_id: optFor.id,
+      name: groupForm.name.trim(), selection_type: groupForm.selection_type,
+      is_required: groupForm.is_required, display_order: optGroups.length,
+    });
+    if (err) { setError(err.message); return; }
+    setGroupForm({ name: "", selection_type: "single", is_required: false });
+    loadOptions(optFor);
+  }
+
+  async function updateGroup(group: GroupWithOptions, patch: Partial<ItemOptionGroup>) {
+    if (!supabase || !optFor) return;
+    const { error: err } = await supabase.from("item_option_groups").update(patch).eq("id", group.id);
+    if (err) { setError(err.message); return; }
+    loadOptions(optFor);
+  }
+
+  async function deleteGroup(group: GroupWithOptions) {
+    if (!supabase || !optFor) return;
+    if (!window.confirm(`Delete the "${group.name}" group and all its options?`)) return;
+    const { error: err } = await supabase.from("item_option_groups").delete().eq("id", group.id);
+    if (err) { setError(err.message); return; }
+    loadOptions(optFor);
+  }
+
+  async function addOption(group: GroupWithOptions) {
+    if (!supabase || !restaurant || !optFor) return;
+    const f = optionForms[group.id] ?? { name: "", price: "" };
+    if (!f.name.trim()) { setError("Give the option a name, e.g. Large or Extra cheese."); return; }
+    const delta = f.price.trim() === "" ? 0 : parseFloat(f.price);
+    if (Number.isNaN(delta) || delta < 0) { setError("Extra price must be 0 or more."); return; }
+    setError(null);
+    const { error: err } = await supabase.from("item_options").insert({
+      restaurant_id: restaurant.id, group_id: group.id,
+      name: f.name.trim(), price_delta: delta, display_order: group.options.length,
+    });
+    if (err) { setError(err.message); return; }
+    setOptionForms((m) => ({ ...m, [group.id]: { name: "", price: "" } }));
+    loadOptions(optFor);
+  }
+
+  async function deleteOption(group: GroupWithOptions, opt: ItemOption) {
+    if (!supabase || !optFor) return;
+    const { error: err } = await supabase.from("item_options").delete().eq("id", opt.id);
+    if (err) { setError(err.message); return; }
+    loadOptions(optFor);
+  }
+
+  async function toggleOptionAvail(group: GroupWithOptions, opt: ItemOption) {
+    if (!supabase || !optFor) return;
+    const { error: err } = await supabase.from("item_options").update({ is_available: !opt.is_available }).eq("id", opt.id);
+    if (err) { setError(err.message); return; }
+    loadOptions(optFor);
+  }
+
   return (
     <DashboardShell title="Menu Items">
       {loading || fetching ? <Loading label="Loading menu items…" /> : !restaurant ? (
@@ -218,7 +312,8 @@ export default function MenuItemsPage() {
               {visible.map((item) => {
                 const idx = items.findIndex((i) => i.id === item.id);
                 return (
-                  <Card key={item.id} className={`flex items-center gap-3 !py-3 ${item.is_available ? "" : "opacity-70"}`}>
+                  <div key={item.id} className="space-y-2">
+                  <Card className={`flex items-center gap-3 !py-3 ${item.is_available ? "" : "opacity-70"}`}>
                     {item.image_url
                       ? // eslint-disable-next-line @next/next/no-img-element
                         <img src={item.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
@@ -242,10 +337,110 @@ export default function MenuItemsPage() {
                         className={`mx-1 inline-flex min-h-[36px] items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.is_available ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
                         {item.is_available ? "ON" : "OFF"}
                       </button>
+                      <button type="button" aria-label="Variations and add-ons" title="Variations & add-ons" onClick={() => toggleOptionsPanel(item)}
+                        className={`flex h-10 w-9 items-center justify-center rounded-lg hover:bg-slate-100 ${optFor?.id === item.id ? "text-brand" : "text-slate-500"}`}><SlidersHorizontal size={17} /></button>
                       <button type="button" aria-label="Edit" onClick={() => startEdit(item)} className="flex h-10 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"><Pencil size={17} /></button>
                       <button type="button" aria-label="Delete" onClick={() => remove(item)} className="flex h-10 w-9 items-center justify-center rounded-lg text-red-500 hover:bg-red-50"><Trash2 size={17} /></button>
                     </div>
                   </Card>
+                  {optFor?.id === item.id && (
+                    <Card className="!py-4">
+                      <h3 className="flex items-center gap-2 font-heading text-sm font-semibold text-ink">
+                        <SlidersHorizontal size={16} className="text-brand" /> Variations & add-ons for “{item.name}”
+                      </h3>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                        Groups like <strong>Size</strong> (customer picks one) or <strong>Extras</strong> (customer picks any).
+                        Customers see these when ordering — a Pro feature. Prices are always rechecked by the server at order time.
+                      </p>
+
+                      {optLoading ? (
+                        <p className="mt-3 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> Loading options…</p>
+                      ) : (
+                        <>
+                          {optGroups.length === 0 && (
+                            <p className="mt-3 rounded-xl border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-400">
+                              No option groups yet. Add your first group below — e.g. “Size”.
+                            </p>
+                          )}
+                          <div className="mt-3 space-y-4">
+                            {optGroups.map((g) => (
+                              <div key={g.id} className="rounded-2xl border border-slate-200 p-3.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-heading text-sm font-bold text-ink">{g.name}</p>
+                                  <select value={g.selection_type} aria-label="Selection type"
+                                    onChange={(e) => updateGroup(g, { selection_type: e.target.value as "single" | "multi" })}
+                                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs">
+                                    <option value="single">Pick one</option>
+                                    <option value="multi">Pick any</option>
+                                  </select>
+                                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+                                    <input type="checkbox" checked={g.is_required} onChange={(e) => updateGroup(g, { is_required: e.target.checked })} className="h-4 w-4 accent-teal-700" />
+                                    Required
+                                  </label>
+                                  <button type="button" onClick={() => deleteGroup(g)}
+                                    className="ml-auto inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600">
+                                    <Trash2 size={13} /> Group
+                                  </button>
+                                </div>
+
+                                <ul className="mt-2.5 space-y-1.5">
+                                  {g.options.map((o) => (
+                                    <li key={o.id} className={`flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm ${o.is_available ? "" : "opacity-55"}`}>
+                                      <span className="flex-1 font-medium text-slate-700">{o.name}</span>
+                                      <span className="text-xs text-slate-500">
+                                        {Number(o.price_delta) > 0 ? `+ ${formatPrice(Number(o.price_delta), restaurant.currency)}` : "Included"}
+                                      </span>
+                                      <button type="button" onClick={() => toggleOptionAvail(g, o)}
+                                        className={`inline-flex min-h-[28px] items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${o.is_available ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                                        {o.is_available ? "ON" : "OFF"}
+                                      </button>
+                                      <button type="button" aria-label={`Delete option ${o.name}`} onClick={() => deleteOption(g, o)}
+                                        className="flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>
+                                    </li>
+                                  ))}
+                                  {g.options.length === 0 && <li className="text-xs text-slate-400">No options in this group yet.</li>}
+                                </ul>
+
+                                <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+                                  <input value={(optionForms[g.id] ?? { name: "", price: "" }).name}
+                                    onChange={(e) => setOptionForms((m) => ({ ...m, [g.id]: { name: e.target.value, price: (m[g.id] ?? { price: "" }).price } }))}
+                                    placeholder="Option name, e.g. Large" className={`${inputCls} !py-2 text-sm`} />
+                                  <input value={(optionForms[g.id] ?? { name: "", price: "" }).price} inputMode="decimal"
+                                    onChange={(e) => setOptionForms((m) => ({ ...m, [g.id]: { name: (m[g.id] ?? { name: "" }).name, price: e.target.value } }))}
+                                    placeholder="Extra price (0 = free)" className={`${inputCls} !py-2 text-sm sm:w-48`} />
+                                  <button type="button" onClick={() => addOption(g)} className={`${btnPrimary} shrink-0 !py-2 text-sm`}>
+                                    <Plus size={15} /> Add option
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 rounded-2xl bg-slate-50 p-3.5">
+                            <p className="text-sm font-semibold text-ink">Add a group</p>
+                            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <input value={groupForm.name} onChange={(e) => setGroupForm((f) => ({ ...f, name: e.target.value }))}
+                                placeholder="Group name, e.g. Size" className={`${inputCls} !py-2 text-sm`} />
+                              <select value={groupForm.selection_type} aria-label="New group selection type"
+                                onChange={(e) => setGroupForm((f) => ({ ...f, selection_type: e.target.value as "single" | "multi" }))}
+                                className={`${inputCls} !py-2 text-sm sm:w-40`}>
+                                <option value="single">Pick one</option>
+                                <option value="multi">Pick any</option>
+                              </select>
+                              <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
+                                <input type="checkbox" checked={groupForm.is_required} onChange={(e) => setGroupForm((f) => ({ ...f, is_required: e.target.checked }))} className="h-4 w-4 accent-teal-700" />
+                                Required
+                              </label>
+                              <button type="button" onClick={addGroup} className={`${btnPrimary} shrink-0 !py-2 text-sm`}>
+                                <Plus size={15} /> Add group
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </Card>
+                  )}
+                  </div>
                 );
               })}
             </div>
