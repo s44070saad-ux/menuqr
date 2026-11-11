@@ -34,6 +34,20 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
    Admin's manual payment log) and makes `restaurant_plan_slug()` expiry-
    aware, so a paid plan past its due date (`subscriptions.ends_at`)
    behaves as Free until a new payment is confirmed in /admin.
+7. **Then run the Phase A+B migration the same way:**
+   `supabase/migration-phase-ab.sql` adds menu themes + QR styling
+   settings (`menu_theme`, `qr_color`, `card_style`), item option
+   groups/options (variations & add-ons) with RLS, the
+   `order_items.options_snapshot` column, options-aware versions of
+   `place_customer_order` / `get_customer_order`, and refreshed plan
+   feature lists. Safe to re-run. On the already-live project, run ONLY
+   this file — the earlier migrations are already applied.
+8. **Then run the free-trial migration the same way:**
+   `supabase/migration-trial.sql` changes the restaurant-creation
+   trigger so every NEW restaurant starts on a 3-day free Pro trial
+   (status `trialing`, `ends_at` = now + 3 days) instead of Free.
+   Expiry is automatic: `restaurant_plan_slug()` returns `free` once
+   the trial ends. Existing restaurants are not affected.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
