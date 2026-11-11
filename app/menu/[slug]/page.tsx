@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, MapPin, Phone, Clock, MessageCircle, Star, Moon, Sun, UtensilsCrossed,
-  Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList, Check, Type,
+  Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList, Check, Type, Flame, RotateCcw,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/utils";
@@ -54,6 +54,11 @@ const STR: Record<Lang, Record<string, string>> = {
     newOrder: "Start a new order", loadingStatus: "Loading your order status…", tapStatus: "Tap to check its status",
     notifyWa: "Send order to restaurant on WhatsApp", customize: "Customize your dish",
     required: "Required", chooseOne: "Choose one", chooseMany: "Choose any",
+    popular: "Popular", pairsWellWith: "Pairs well with", orderAgain: "Order again",
+    enjoyedIt: "Enjoyed your meal?", rateGoogle: "Rate us on Google", privateFb: "Send private feedback",
+    fbPlaceholder: "Tell the restaurant what you thought — only they will see this", fbSend: "Send feedback",
+    fbThanks: "Thank you! Your feedback was sent to the restaurant.", fbError: "Could not send feedback. Please try again.",
+    reorderNote: "These items need your choices on the menu:",
     stepReceived: "Received", stepPreparing: "Preparing", stepReady: "Ready",
     readyBy: "Ready by about", readyNow: "Should be ready now — please check at the counter.",
     statusPending: "Waiting for confirmation", statusConfirmed: "Confirmed — being prepared",
@@ -88,6 +93,11 @@ const STR: Record<Lang, Record<string, string>> = {
     newOrder: "نیا آرڈر شروع کریں", loadingStatus: "آپ کے آرڈر کی صورتحال لوڈ ہو رہی ہے…", tapStatus: "صورتحال دیکھنے کے لیے دبائیں",
     notifyWa: "آرڈر ریسٹورنٹ کو واٹس ایپ پر بھیجیں", customize: "اپنی پسند منتخب کریں",
     required: "لازمی", chooseOne: "ایک منتخب کریں", chooseMany: "کوئی بھی منتخب کریں",
+    popular: "مقبول", pairsWellWith: "اس کے ساتھ اچھا لگے گا", orderAgain: "دوبارہ آرڈر کریں",
+    enjoyedIt: "کھانا پسند آیا؟", rateGoogle: "گوگل پر ریٹنگ دیں", privateFb: "پرائیویٹ فیڈبیک بھیجیں",
+    fbPlaceholder: "ریستوراں کو بتائیں کھانا کیسا لگا — یہ صرف وہی دیکھیں گے", fbSend: "فیڈبیک بھیجیں",
+    fbThanks: "شکریہ! آپ کا فیڈبیک ریسٹورنٹ کو بھیج دیا گیا ہے۔", fbError: "فیڈبیک نہیں بھیجا جا سکا۔ دوبارہ کوشش کریں۔",
+    reorderNote: "ان اشیاء کے لیے مینیو پر انتخاب درکار ہے:",
     stepReceived: "موصول ہو گیا", stepPreparing: "تیار ہو رہا ہے", stepReady: "تیار ہے",
     readyBy: "تقریباً اس وقت تک تیار ہوگا", readyNow: "اب تیار ہونا چاہیے — براہ کرم کاؤنٹر پر معلوم کریں۔",
     statusPending: "تصدیق کا انتظار ہے", statusConfirmed: "تصدیق ہو گئی — تیار کیا جا رہا ہے",
@@ -106,7 +116,7 @@ const STR: Record<Lang, Record<string, string>> = {
 
 interface GroupWithOptions extends ItemOptionGroup { options: ItemOption[] }
 interface CartOption { id: string; group_name: string; option_name: string; price_delta: number }
-interface CartLine { key: string; item: MenuItem; qty: number; options: CartOption[]; unitPrice: number }
+interface CartLine { key: string; item: MenuItem; qty: number; options: CartOption[]; unitPrice: number; viaUpsell?: boolean }
 
 const THEMES: Record<string, { bg: string; dark: boolean | null }> = {
   classic: { bg: "", dark: null },
@@ -125,6 +135,15 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [items, setItems] = useState<MenuItem[]>([]);
   const [groupsByItem, setGroupsByItem] = useState<Map<string, GroupWithOptions[]>>(new Map());
   const [planSlug, setPlanSlug] = useState<string>("free");
+  const [popularIds, setPopularIds] = useState<Set<string>>(new Set());
+  const [reorderNote, setReorderNote] = useState<string | null>(null);
+  const [fbOpen, setFbOpen] = useState(false);
+  const [fbRating, setFbRating] = useState(0);
+  const [fbText, setFbText] = useState("");
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbSent, setFbSent] = useState(false);
+  const [fbError, setFbError] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
   const [dietFilter, setDietFilter] = useState<string | null>(null);
   const [avoidAllergen, setAvoidAllergen] = useState<string | null>(null);
@@ -169,6 +188,27 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [orderError, setOrderError] = useState<string | null>(null);
   const [myOrder, setMyOrder] = useState<CustomerOrder | null>(null);
   const [myOrderCreds, setMyOrderCreds] = useState<{ id: string; token: string } | null>(null);
+  useEffect(() => {
+    setFbSent(false); setFbOpen(false); setFbText(""); setFbRating(0); setFbError(null);
+    if (myOrderCreds) {
+      try { if (localStorage.getItem(`menuqr_feedback_${myOrderCreds.id}`)) setFbSent(true); } catch { /* ignore */ }
+    }
+  }, [myOrderCreds]);
+
+  async function sendFeedback() {
+    if (!supabase || !myOrderCreds || fbBusy) return;
+    if (fbText.trim().length < 3) { setFbError(t.fbError); return; }
+    setFbBusy(true); setFbError(null);
+    const { data, error } = await supabase.rpc("submit_order_feedback", {
+      p_order_id: myOrderCreds.id, p_token: myOrderCreds.token,
+      p_rating: fbRating > 0 ? fbRating : null, p_message: fbText.trim(),
+    });
+    setFbBusy(false);
+    if (error) { setFbError(t.fbError); return; }
+    void data;
+    setFbSent(true);
+    try { localStorage.setItem(`menuqr_feedback_${myOrderCreds.id}`, "1"); } catch { /* ignore */ }
+  }
 
   // Options-sheet state
   const [optItem, setOptItem] = useState<MenuItem | null>(null);
@@ -206,7 +246,17 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       if (s) setDarkPref(s.theme === "dark");
       setCategories((catsRes.data as Category[]) ?? []);
       setItems((itemsRes.data as MenuItem[]) ?? []);
-      if (typeof planRes.data === "string") setPlanSlug(planRes.data);
+      if (typeof planRes.data === "string") {
+        setPlanSlug(planRes.data);
+        if (planRes.data === "pro" || planRes.data === "business") {
+          try {
+            const { data: pop } = await supabase.rpc("popular_item_ids", { p_restaurant_id: r.id });
+            if (!cancelled && Array.isArray(pop)) {
+              setPopularIds(new Set((pop as { menu_item_id: string }[]).map((x) => x.menu_item_id)));
+            }
+          } catch { /* badges are decorative — never break the menu */ }
+        }
+      }
 
       // Attach options to their groups, grouped by item.
       const groups = (groupsRes.data as ItemOptionGroup[]) ?? [];
@@ -323,6 +373,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
 
   // ---------- Theme -------------------------------------------------
   const themeName = planSlug === "free" ? "classic" : (settings?.menu_theme ?? "classic");
+  const planAllowsUpsell = planSlug === "pro" || planSlug === "business";
   const themeCfg = THEMES[themeName] ?? THEMES.classic;
   const dark = themeCfg.dark ?? darkPref;
 
@@ -374,19 +425,49 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     .replace("{more}", formatPrice(minOrder - cartTotal, restaurant?.currency ?? "PKR"));
   const itemQty = (itemId: string) => lines.filter((l) => l.item.id === itemId).reduce((n, l) => n + l.qty, 0);
 
-  function addLine(item: MenuItem, options: CartOption[], qty = 1) {
+  function addLine(item: MenuItem, options: CartOption[], qty = 1, viaUpsell = false) {
     const key = item.id + "|" + options.map((o) => o.id).sort().join(",");
     const unitPrice = priceOf(item) + options.reduce((n, o) => n + Number(o.price_delta), 0);
     setLines((prev) => {
       const existing = prev.find((l) => l.key === key);
-      if (existing) return prev.map((l) => (l.key === key ? { ...l, qty: Math.min(l.qty + qty, 50) } : l));
-      return [...prev, { key, item, qty, options, unitPrice }];
+      if (existing) return prev.map((l) => (l.key === key ? { ...l, qty: Math.min(l.qty + qty, 50), viaUpsell: l.viaUpsell || viaUpsell } : l));
+      return [...prev, { key, item, qty, options, unitPrice, viaUpsell }];
     });
   }
 
   function setLineQty(key: string, qty: number) {
     setLines((prev) => qty <= 0 ? prev.filter((l) => l.key !== key)
       : prev.map((l) => (l.key === key ? { ...l, qty: Math.min(qty, 50) } : l)));
+  }
+
+  // Phase 2.1: one-tap reorder of the customer's last order. Options are
+  // matched back by name; an item whose required choices can't be matched
+  // is reported so the customer can pick it from the menu instead.
+  function reorderLastOrder() {
+    if (!myOrder) return;
+    const skipped: string[] = [];
+    for (const oi of myOrder.items ?? []) {
+      // get_customer_order returns names, not ids — match the live item by name.
+      const item = items.find((i) => i.name === oi.item_name);
+      if (!item || !item.is_available) { skipped.push(oi.item_name); continue; }
+      const groups = groupsByItem.get(item.id) ?? [];
+      const matched: CartOption[] = [];
+      let ok = true;
+      for (const snap of oi.options ?? []) {
+        const g = groups.find((x) => x.name === snap.group_name);
+        const o = g?.options.find((x) => x.name === snap.option_name);
+        if (!g || !o) { ok = false; break; }
+        matched.push({ id: o.id, group_name: g.name, option_name: o.name, price_delta: Number(o.price_delta) });
+      }
+      if (!ok && groups.some((g) => g.is_required)) { skipped.push(oi.item_name); continue; }
+      addLine(item, ok ? matched : [], oi.quantity);
+    }
+    setReorderNote(skipped.length > 0 ? `${t.reorderNote} ${skipped.join(", ")}` : null);
+  }
+
+  function openSuggestion(sug: MenuItem) {
+    if ((groupsByItem.get(sug.id) ?? []).length > 0) { setSheetOpen(false); setOptItem(sug); }
+    else addLine(sug, [], 1, true);
   }
 
   // Simple +/- for items without options (keeps the original fast flow).
@@ -416,6 +497,20 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       return { ...prev, [group.id]: cur.includes(opt.id) ? cur.filter((x) => x !== opt.id) : [...cur, opt.id] };
     });
   }
+
+  const cartSuggestions = useMemo(() => {
+    if (!planAllowsUpsell || lines.length === 0) return [] as MenuItem[];
+    const inCart = new Set(lines.map((l) => l.item.id));
+    const out: MenuItem[] = [];
+    const push = (id: string) => {
+      if (out.length >= 4 || inCart.has(id)) return;
+      const it = items.find((i) => i.id === id);
+      if (it && it.is_available && !out.some((o) => o.id === id)) out.push(it);
+    };
+    for (const l of lines) for (const id of l.item.suggested_item_ids ?? []) push(id);
+    for (const id of popularIds) push(id);
+    return out;
+  }, [planAllowsUpsell, lines, items, popularIds]);
 
   const optGroups = optItem ? (groupsByItem.get(optItem.id) ?? []) : [];
   const optSelected: CartOption[] = optGroups.flatMap((g) =>
@@ -465,6 +560,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         p_items: lines.map((l) => ({
           menu_item_id: l.item.id, quantity: l.qty,
           option_ids: l.options.map((o) => o.id),
+          via_upsell: !!l.viaUpsell,
         })),
       });
       if (error) throw error;
@@ -686,7 +782,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} featured onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
-                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)}
                       onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
@@ -704,7 +800,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                         expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                         ordering={ordering} qty={itemQty(item.id)}
-                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
+                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)}
                         onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                     ))}
                   </div>
@@ -720,7 +816,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
-                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)}
                       onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
@@ -796,6 +892,27 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                 </div>
               </div>
             ))}
+
+            {planAllowsUpsell && (() => {
+              const sugs = (optItem.suggested_item_ids ?? [])
+                .map((id) => items.find((i) => i.id === id))
+                .filter((x): x is MenuItem => Boolean(x) && x!.is_available && x!.id !== optItem.id);
+              if (sugs.length === 0) return null;
+              return (
+                <div className="mt-5">
+                  <p className="text-sm font-semibold">{t.pairsWellWith}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {sugs.map((sg) => (
+                      <button key={sg.id} type="button"
+                        onClick={() => { if ((groupsByItem.get(sg.id) ?? []).length > 0) setOptItem(sg); else addLine(sg, [], 1, true); }}
+                        className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3 py-2 text-[13px] font-medium ${dark ? "border-neutral-700" : "border-slate-200"}`}>
+                        <Plus size={14} style={{ color: accent }} /> {sg.name} · {formatPrice(priceOf(sg), currency)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             <button type="button" disabled={!optValid}
               onClick={() => { addLine(optItem, optSelected); setOptItem(null); }}
@@ -875,6 +992,44 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </div>
                       );
                     })()}
+                    {myOrder.status === "completed" && (
+                      <div className={`mt-4 rounded-2xl border p-4 ${dark ? "border-neutral-800" : "border-slate-200"}`}>
+                        <p className="text-center font-heading text-sm font-bold">{t.enjoyedIt}</p>
+                        {settings?.google_review_url && (
+                          <a href={settings.google_review_url} target="_blank" rel="noreferrer"
+                            className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: accent }}>
+                            <Star size={17} className="fill-white" /> {t.rateGoogle}
+                          </a>
+                        )}
+                        {fbSent ? (
+                          <p className="mt-3 text-center text-sm font-medium text-emerald-600">{t.fbThanks}</p>
+                        ) : !fbOpen ? (
+                          <button type="button" onClick={() => setFbOpen(true)}
+                            className={`mt-2.5 min-h-[44px] w-full rounded-xl border px-4 py-2.5 text-sm font-medium ${dark ? "border-neutral-700" : "border-slate-300"}`}>
+                            {t.privateFb}
+                          </button>
+                        ) : (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-center gap-1.5" role="radiogroup" aria-label="Rating">
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <button key={n} type="button" role="radio" aria-checked={fbRating === n} aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                                  onClick={() => setFbRating(n)} className="flex h-10 w-10 items-center justify-center">
+                                  <Star size={26} className={n <= fbRating ? "fill-amber-400 text-amber-400" : "text-slate-300"} />
+                                </button>
+                              ))}
+                            </div>
+                            <textarea value={fbText} onChange={(e) => setFbText(e.target.value)} rows={3} maxLength={1000}
+                              placeholder={t.fbPlaceholder} aria-label={t.privateFb}
+                              className={`mt-2 w-full rounded-xl border px-3 py-2.5 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800" : "border-slate-300 bg-white"}`} />
+                            {fbError && <p className="mt-1.5 text-center text-xs font-medium text-red-500">{fbError}</p>}
+                            <button type="button" onClick={sendFeedback} disabled={fbBusy || fbText.trim().length < 3}
+                              className="mt-2 flex min-h-[46px] w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: accent }}>
+                              {fbBusy ? "…" : t.fbSend}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <ul className="mt-4 space-y-2 text-sm">
                       {myOrder.items.map((oi, i) => (
                         <li key={i}>
@@ -908,6 +1063,12 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         <MessageCircle size={19} /> {t.notifyWa}
                       </a>
                     )}
+                    {myOrder.status === "completed" && ordering && (
+                      <button type="button" onClick={reorderLastOrder}
+                        className="mt-4 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white" style={{ background: accent }}>
+                        <RotateCcw size={18} /> {t.orderAgain}
+                      </button>
+                    )}
                     {(myOrder.status === "completed" || myOrder.status === "cancelled") && (
                       <button type="button" className="mt-4 w-full rounded-xl border px-4 py-3 text-sm font-medium"
                         onClick={() => { setMyOrderCreds(null); setMyOrder(null); try { localStorage.removeItem(`menuqr_order_${restaurant.id}`); } catch { /* ignore */ } }}>
@@ -940,6 +1101,26 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </li>
                       ))}
                     </ul>
+                    {reorderNote && (
+                      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">{reorderNote}</p>
+                    )}
+                    {cartSuggestions.length > 0 && (
+                      <div className={`mt-4 border-t pt-3 ${dark ? "border-neutral-800" : "border-slate-100"}`}>
+                        <p className="flex items-center gap-1.5 text-sm font-semibold"><Flame size={15} style={{ color: accent }} /> {t.pairsWellWith}</p>
+                        <div className="mt-2 space-y-2">
+                          {cartSuggestions.map((sg) => (
+                            <div key={sg.id} className="flex items-center gap-3">
+                              <p className="min-w-0 flex-1 truncate text-sm">{sg.name}</p>
+                              <span className="text-xs" style={{ color: accent }}>{formatPrice(priceOf(sg), currency)}</span>
+                              <button type="button" onClick={() => openSuggestion(sg)}
+                                className="inline-flex min-h-[34px] items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold text-white" style={{ background: accent }}>
+                                <Plus size={14} /> {t.add}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {(taxAmt > 0 || svcAmt > 0) ? (
                       <div className={`mt-4 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
                         <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(cartTotal, currency)}</span></div>
@@ -1072,11 +1253,11 @@ function Chip({ label, active, accent, dark, onClick }: { label: string; active:
   );
 }
 
-function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions }: {
+function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions, popular = false }: {
   item: MenuItem; currency: string; accent: string; dark: boolean; t: Record<string, string>; lang: Lang;
   expanded: boolean; onTap: () => void; featured?: boolean;
   ordering: boolean; qty: number; hasOptions: boolean;
-  onSimpleQty: (q: number) => void; onOptions: () => void;
+  onSimpleQty: (q: number) => void; onOptions: () => void; popular?: boolean;
 }) {
   const hasDiscount = item.discount_price != null && Number(item.discount_price) < Number(item.price);
   const priceBlock = (
@@ -1088,8 +1269,13 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
     </div>
   );
 
-  const metaBlock = ((item.dietary?.length ?? 0) > 0 || item.calories != null || (item.allergens?.length ?? 0) > 0) ? (
+  const metaBlock = (popular || (item.dietary?.length ?? 0) > 0 || item.calories != null || (item.allergens?.length ?? 0) > 0) ? (
     <div className="mt-1.5 space-y-1">
+      {popular && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold text-orange-600">
+          <Flame size={11} /> {t.popular}
+        </span>
+      )}
       {((item.dietary?.length ?? 0) > 0 || item.calories != null) && (
         <div className="flex flex-wrap items-center gap-1">
           {(item.dietary ?? []).map((k) => (
