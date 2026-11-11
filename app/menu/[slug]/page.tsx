@@ -9,6 +9,7 @@ import { formatPrice } from "@/lib/utils";
 import type {
   Category, CustomerOrder, ItemOption, ItemOptionGroup, MenuItem, Restaurant, RestaurantSettings,
 } from "@/lib/types";
+import { ALLERGENS, DIETARY, allergenLabel, dietaryLabel } from "@/lib/allergens";
 
 /**
  * PUBLIC digital menu — the flagship page.
@@ -54,6 +55,7 @@ const STR: Record<Lang, Record<string, string>> = {
     confirmedMsg: "Good news — the restaurant confirmed your order and is preparing it.",
     completedMsg: "This order is complete. Thank you!",
     cancelledMsg: "The restaurant could not accept this order. Please speak to the staff or try again.",
+    contains: "Contains", avoidAllergen: "Avoid allergen:", anyAllergen: "None — show all",
     orderPlaced: "Order placed", menuNotFound: "Menu not found",
     notFoundMsg: "This restaurant menu is not published or the link is wrong. Please check the QR code and try again.",
     menuUnavailable: "Menu unavailable", unavailableMsg: "This menu service is not connected yet. Please check back shortly.",
@@ -83,6 +85,7 @@ const STR: Record<Lang, Record<string, string>> = {
     confirmedMsg: "خوشخبری — ریسٹورنٹ نے آپ کے آرڈر کی تصدیق کر دی ہے اور تیاری شروع ہے۔",
     completedMsg: "یہ آرڈر مکمل ہو گیا ہے۔ شکریہ!",
     cancelledMsg: "ریسٹورنٹ یہ آرڈر قبول نہیں کر سکا۔ براہ کرم عملے سے بات کریں یا دوبارہ کوشش کریں۔",
+    contains: "شامل ہے", avoidAllergen: "الرجین سے بچیں:", anyAllergen: "کوئی نہیں — سب دکھائیں",
     orderPlaced: "آرڈر ہو گیا", menuNotFound: "مینیو نہیں ملا",
     notFoundMsg: "یہ مینیو شائع نہیں ہے یا لنک غلط ہے۔ QR کوڈ چیک کر کے دوبارہ کوشش کریں۔",
     menuUnavailable: "مینیو دستیاب نہیں", unavailableMsg: "یہ سروس ابھی منسلک نہیں ہے۔ براہ کرم کچھ دیر بعد دیکھیں۔",
@@ -111,6 +114,8 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [groupsByItem, setGroupsByItem] = useState<Map<string, GroupWithOptions[]>>(new Map());
   const [planSlug, setPlanSlug] = useState<string>("free");
   const [search, setSearch] = useState("");
+  const [dietFilter, setDietFilter] = useState<string | null>(null);
+  const [avoidAllergen, setAvoidAllergen] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [darkPref, setDarkPref] = useState(false);
@@ -289,10 +294,16 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const showFeatured = settings?.show_featured ?? true;
   const whatsappEnabled = (settings?.enable_whatsapp ?? true) && restaurant?.whatsapp;
 
+  const hasAllergenData = useMemo(
+    () => items.some((it) => (it.dietary?.length ?? 0) > 0 || (it.allergens?.length ?? 0) > 0),
+    [items]);
+
   const filtered = useMemo(() => items.filter((it) => {
     if (search && !(it.name + " " + (it.description ?? "")).toLowerCase().includes(search.toLowerCase())) return false;
+    if (dietFilter && !(it.dietary ?? []).includes(dietFilter)) return false;
+    if (avoidAllergen && (it.allergens ?? []).includes(avoidAllergen)) return false;
     return true;
-  }), [items, search]);
+  }), [items, search, dietFilter, avoidAllergen]);
 
   const featured = useMemo(() => filtered.filter((i) => i.is_featured), [filtered]);
   const byCategory = useMemo(() => {
@@ -559,6 +570,28 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           </div>
         )}
 
+        {/* Dietary filters + allergen avoidance (shown only when the
+            restaurant has filled in dietary/allergen data) */}
+        {hasAllergenData && (
+          <div className="mt-3 space-y-2">
+            <div className="no-scrollbar flex gap-2 overflow-x-auto" role="group" aria-label="Dietary filters">
+              {DIETARY.map((d) => (
+                <Chip key={d.key} label={dietaryLabel(d.key, lang)} active={dietFilter === d.key} accent={accent} dark={dark}
+                  onClick={() => setDietFilter(dietFilter === d.key ? null : d.key)} />
+              ))}
+            </div>
+            <label className={`flex items-center gap-2 text-xs font-medium ${dark ? "text-neutral-400" : "text-slate-500"}`}>
+              {t.avoidAllergen}
+              <select value={avoidAllergen ?? ""} aria-label={t.avoidAllergen}
+                onChange={(e) => setAvoidAllergen(e.target.value || null)}
+                className={`min-h-[38px] flex-1 rounded-xl border px-2.5 py-2 text-[13px] ${dark ? "border-neutral-800 bg-neutral-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>
+                <option value="">{t.anyAllergen}</option>
+                {ALLERGENS.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+
         {/* Sticky category chips */}
         <div className="sticky top-0 z-30 -mx-4 mt-4 px-4 py-2.5 backdrop-blur"
           style={{ backgroundColor: dark ? "rgba(10,10,11,0.9)" : `${themeCfg.bg || "#F6F7F9"}E6` }}>
@@ -595,7 +628,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                 </h2>
                 <div className="grid grid-cols-2 gap-3">
                   {featured.map((item) => (
-                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t}
+                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} featured onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
                       hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
@@ -613,7 +646,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                   <h2 className="mb-3 font-heading text-lg font-semibold">{cat.name}</h2>
                   <div className="space-y-3">
                     {list.map((item) => (
-                      <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t}
+                      <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                         expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                         ordering={ordering} qty={itemQty(item.id)}
                         hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
@@ -629,7 +662,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                 <h2 className="mb-3 font-heading text-lg font-semibold">{t.moreDishes}</h2>
                 <div className="space-y-3">
                   {(byCategory.get("__none__") ?? []).map((item) => (
-                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t}
+                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
                       hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
@@ -931,8 +964,8 @@ function Chip({ label, active, accent, dark, onClick }: { label: string; active:
   );
 }
 
-function ItemCard({ item, currency, accent, dark, t, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions }: {
-  item: MenuItem; currency: string; accent: string; dark: boolean; t: Record<string, string>;
+function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions }: {
+  item: MenuItem; currency: string; accent: string; dark: boolean; t: Record<string, string>; lang: Lang;
   expanded: boolean; onTap: () => void; featured?: boolean;
   ordering: boolean; qty: number; hasOptions: boolean;
   onSimpleQty: (q: number) => void; onOptions: () => void;
@@ -946,6 +979,24 @@ function ItemCard({ item, currency, accent, dark, t, expanded, onTap, featured =
       {hasDiscount && <span className={`text-xs line-through ${dark ? "text-neutral-500" : "text-slate-400"}`}>{formatPrice(Number(item.price), currency)}</span>}
     </div>
   );
+
+  const metaBlock = ((item.dietary?.length ?? 0) > 0 || item.calories != null || (item.allergens?.length ?? 0) > 0) ? (
+    <div className="mt-1.5 space-y-1">
+      {((item.dietary?.length ?? 0) > 0 || item.calories != null) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {(item.dietary ?? []).map((k) => (
+            <span key={k} className={`rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold ${dark ? "text-emerald-400" : "text-emerald-700"}`}>{dietaryLabel(k, lang)}</span>
+          ))}
+          {item.calories != null && <span className={`text-[11px] font-medium ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.calories} kcal</span>}
+        </div>
+      )}
+      {(item.allergens?.length ?? 0) > 0 && (
+        <p className={`text-[11px] leading-snug ${dark ? "text-neutral-500" : "text-slate-400"}`}>
+          {t.contains}: {(item.allergens ?? []).map(allergenLabel).join(", ")}
+        </p>
+      )}
+    </div>
+  ) : null;
 
   const addControl = ordering && item.is_available ? (
     hasOptions ? (
@@ -980,6 +1031,7 @@ function ItemCard({ item, currency, accent, dark, t, expanded, onTap, featured =
           <p className="line-clamp-1 text-sm font-semibold">{item.name}</p>
           {expanded && item.description && <p className={`mt-1 text-xs leading-relaxed ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>}
           <div className="mt-1.5">{priceBlock}</div>
+          {metaBlock}
           {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{t.unavailableShort}</span>}
           {addControl}
         </div>
@@ -999,6 +1051,7 @@ function ItemCard({ item, currency, accent, dark, t, expanded, onTap, featured =
           <p className={`mt-1 text-[13px] leading-relaxed ${expanded ? "" : "line-clamp-2"} ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>
         )}
         <div className="mt-2">{priceBlock}</div>
+        {metaBlock}
         {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{t.unavailable}</span>}
         {addControl}
       </div>
