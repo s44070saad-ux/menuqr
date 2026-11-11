@@ -259,7 +259,7 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-ink"><ShieldCheck size={20} /></span>
           <div>
-            <p className="font-heading text-base font-semibold leading-none">MenuQR Super Admin</p>
+            <p className="font-heading text-base font-semibold leading-none">Velora Super Admin</p>
             <p className="mt-0.5 text-[11px] text-slate-300">{profile?.email}</p>
           </div>
           <div className="ml-auto flex items-center gap-1">
