@@ -2,28 +2,104 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, MapPin, Phone, Clock, MessageCircle, Star, Moon, Sun, UtensilsCrossed,
-  Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList,
+  Plus, Minus, ShoppingBag, X, CheckCircle2, Clock3, ChefHat, Ban, ClipboardList, Check,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/utils";
-import type { Category, CustomerOrder, MenuItem, Restaurant, RestaurantSettings } from "@/lib/types";
+import type {
+  Category, CustomerOrder, ItemOption, ItemOptionGroup, MenuItem, Restaurant, RestaurantSettings,
+} from "@/lib/types";
 
 /**
  * PUBLIC digital menu — the flagship page.
  * - Works fully signed-out (Supabase anon role + RLS public policies).
- * - Analytics (fixed): a visit is recorded at most once per visitor per
- *   30 minutes (localStorage), the restaurant owner is never counted,
- *   and `source` separates a true QR scan (?src=qr, set by printed QR
- *   codes) from a direct/shared link visit. Table QRs also carry
- *   ?table=N, which attributes the visit AND pre-fills dine-in orders.
- * - Item views count at most once per item per page session.
- * - Ordering (Pro/Business only, enforced in the database by the
- *   place_customer_order RPC — prices are recomputed server-side):
- *   cart -> dine-in (table number) or takeaway (name + phone) ->
- *   order status polled live via get_customer_order (order_id + secret
- *   token), so the customer sees the owner's Confirm instantly while
- *   this page is open.
+ * - Analytics: one visit per visitor per 30 minutes (localStorage),
+ *   owner never counted, `source` separates QR scans (?src=qr) from
+ *   link visits; table QRs (?table=N) attribute the visit and
+ *   pre-fill dine-in orders.
+ * - Ordering (Pro/Business, enforced in the DB by place_customer_order;
+ *   prices incl. option deltas are recomputed server-side): cart lines
+ *   may carry variations/add-ons chosen in the options sheet; status is
+ *   polled via get_customer_order (order_id + secret token).
+ * - Menu themes (Starter+): classic / midnight / fresh / royal from
+ *   restaurant_settings.menu_theme; Free restaurants always render
+ *   classic. EN/Urdu chrome toggle; dish text stays owner-entered.
  */
+
+type Lang = "en" | "ur";
+
+const STR: Record<Lang, Record<string, string>> = {
+  en: {
+    search: "Search dishes…", all: "All", featured: "Featured", moreDishes: "More dishes",
+    menuSoon: "Menu coming soon", menuSoonHint: "This restaurant is still adding its dishes. Please check back shortly.",
+    noMatch: "No dishes match your search", noMatchHint: "Try a different search.",
+    add: "Add", unavailable: "Currently unavailable", unavailableShort: "Unavailable", inCart: "in cart",
+    viewCart: "View cart & order", item: "item", items: "items",
+    yourCart: "Your cart", yourOrder: "Your order",
+    cartEmpty: "Your cart is empty. Tap + on any dish to add it.",
+    total: "Total", dineIn: "Dine-in (at table)", takeaway: "Takeaway",
+    tableNumber: "Table number", yourName: "Your name", yourNameOpt: "Your name (optional)",
+    namePh: "Name", phone: "Phone number", phoneHint: "The restaurant uses this only to contact you about this order.",
+    note: "Note (optional)", notePh: "e.g. Less spicy, extra raita…",
+    placeOrder: "Place order", placing: "Placing order…",
+    payNote: "No online payment — pay at the counter. The restaurant must confirm your order.",
+    trackPrev: "Track my previous order instead", table: "Table", whatsappUs: "WhatsApp us",
+    payCounter: "Pay at the counter. This page checks for updates every few seconds while it is open.",
+    newOrder: "Start a new order", loadingStatus: "Loading your order status…", tapStatus: "Tap to check its status",
+    notifyWa: "Send order to restaurant on WhatsApp", customize: "Customize your dish",
+    required: "Required", chooseOne: "Choose one", chooseMany: "Choose any",
+    statusPending: "Waiting for confirmation", statusConfirmed: "Confirmed — being prepared",
+    statusCompleted: "Completed", statusCancelled: "Cancelled by the restaurant",
+    pendingMsg: "The restaurant has received your order. Keep this page open — it updates automatically when they confirm.",
+    confirmedMsg: "Good news — the restaurant confirmed your order and is preparing it.",
+    completedMsg: "This order is complete. Thank you!",
+    cancelledMsg: "The restaurant could not accept this order. Please speak to the staff or try again.",
+    orderPlaced: "Order placed", menuNotFound: "Menu not found",
+    notFoundMsg: "This restaurant menu is not published or the link is wrong. Please check the QR code and try again.",
+    menuUnavailable: "Menu unavailable", unavailableMsg: "This menu service is not connected yet. Please check back shortly.",
+  },
+  ur: {
+    search: "ڈشز تلاش کریں…", all: "تمام", featured: "نمایاں", moreDishes: "مزید ڈشز",
+    menuSoon: "مینیو جلد آ رہا ہے", menuSoonHint: "یہ ریسٹورنٹ ابھی ڈشز شامل کر رہا ہے۔ براہ کرم کچھ دیر بعد دوبارہ دیکھیں۔",
+    noMatch: "کوئی ڈش نہیں ملی", noMatchHint: "کوئی اور لفظ تلاش کریں۔",
+    add: "شامل کریں", unavailable: "فی الحال دستیاب نہیں", unavailableShort: "دستیاب نہیں", inCart: "کارٹ میں",
+    viewCart: "کارٹ دیکھیں اور آرڈر کریں", item: "آئٹم", items: "آئٹمز",
+    yourCart: "آپ کا کارٹ", yourOrder: "آپ کا آرڈر",
+    cartEmpty: "آپ کا کارٹ خالی ہے۔ کسی ڈش پر + دبائیں۔",
+    total: "کل رقم", dineIn: "یہیں کھائیں (ٹیبل)", takeaway: "ٹیک اوے",
+    tableNumber: "ٹیبل نمبر", yourName: "آپ کا نام", yourNameOpt: "آپ کا نام (اختیاری)",
+    namePh: "نام", phone: "فون نمبر", phoneHint: "ریسٹورنٹ یہ نمبر صرف اس آرڈر کے لیے استعمال کرے گا۔",
+    note: "نوٹ (اختیاری)", notePh: "مثلاً کم مرچ، اضافی رائتہ…",
+    placeOrder: "آرڈر کریں", placing: "آرڈر بھیجا جا رہا ہے…",
+    payNote: "آن لائن ادائیگی نہیں — کاؤنٹر پر ادا کریں۔ ریسٹورنٹ آپ کے آرڈر کی تصدیق کرے گا۔",
+    trackPrev: "اس کے بجائے میرا پچھلا آرڈر دیکھیں", table: "ٹیبل", whatsappUs: "واٹس ایپ کریں",
+    payCounter: "کاؤنٹر پر ادائیگی کریں۔ یہ صفحہ کھلا رہنے تک خود بخود اپڈیٹ ہوتا ہے۔",
+    newOrder: "نیا آرڈر شروع کریں", loadingStatus: "آپ کے آرڈر کی صورتحال لوڈ ہو رہی ہے…", tapStatus: "صورتحال دیکھنے کے لیے دبائیں",
+    notifyWa: "آرڈر ریسٹورنٹ کو واٹس ایپ پر بھیجیں", customize: "اپنی پسند منتخب کریں",
+    required: "لازمی", chooseOne: "ایک منتخب کریں", chooseMany: "کوئی بھی منتخب کریں",
+    statusPending: "تصدیق کا انتظار ہے", statusConfirmed: "تصدیق ہو گئی — تیار کیا جا رہا ہے",
+    statusCompleted: "مکمل ہو گیا", statusCancelled: "ریسٹورنٹ نے منسوخ کر دیا",
+    pendingMsg: "ریسٹورنٹ کو آپ کا آرڈر مل گیا ہے۔ یہ صفحہ کھلا رکھیں — تصدیق ہوتے ہی اپڈیٹ ہو جائے گا۔",
+    confirmedMsg: "خوشخبری — ریسٹورنٹ نے آپ کے آرڈر کی تصدیق کر دی ہے اور تیاری شروع ہے۔",
+    completedMsg: "یہ آرڈر مکمل ہو گیا ہے۔ شکریہ!",
+    cancelledMsg: "ریسٹورنٹ یہ آرڈر قبول نہیں کر سکا۔ براہ کرم عملے سے بات کریں یا دوبارہ کوشش کریں۔",
+    orderPlaced: "آرڈر ہو گیا", menuNotFound: "مینیو نہیں ملا",
+    notFoundMsg: "یہ مینیو شائع نہیں ہے یا لنک غلط ہے۔ QR کوڈ چیک کر کے دوبارہ کوشش کریں۔",
+    menuUnavailable: "مینیو دستیاب نہیں", unavailableMsg: "یہ سروس ابھی منسلک نہیں ہے۔ براہ کرم کچھ دیر بعد دیکھیں۔",
+  },
+};
+
+interface GroupWithOptions extends ItemOptionGroup { options: ItemOption[] }
+interface CartOption { id: string; group_name: string; option_name: string; price_delta: number }
+interface CartLine { key: string; item: MenuItem; qty: number; options: CartOption[]; unitPrice: number }
+
+const THEMES: Record<string, { bg: string; dark: boolean | null }> = {
+  classic: { bg: "", dark: null },
+  midnight: { bg: "#0A0A0B", dark: true },
+  fresh: { bg: "#EDF5EF", dark: false },
+  royal: { bg: "#FAF4E8", dark: false },
+};
+
 export default function PublicMenuPage({ params }: { params: { slug: string } }) {
   const slug = params.slug;
   const [loading, setLoading] = useState(true);
@@ -32,24 +108,28 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [groupsByItem, setGroupsByItem] = useState<Map<string, GroupWithOptions[]>>(new Map());
+  const [planSlug, setPlanSlug] = useState<string>("free");
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [dark, setDark] = useState(false);
+  const [darkPref, setDarkPref] = useState(false);
+  const [lang, setLang] = useState<Lang>("en");
   const scanRecorded = useRef(false);
   const viewedItems = useRef<Set<string>>(new Set());
   const isOwnerRef = useRef(false);
 
-  // URL params (read once): ?src=qr and ?table=N come from printed QRs.
   const [qrTable] = useState<string | null>(() =>
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("table") : null);
   const [qrSource] = useState<string | null>(() =>
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("src") : null);
   const [qrId, setQrId] = useState<string | null>(null);
 
-  // Ordering state
+  // Ordering state — cart is a list of lines; a line is one item in one
+  // option configuration, so the same dish can appear twice (e.g.
+  // Large + Extra cheese, and Small plain).
   const [ordering, setOrdering] = useState(false);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [lines, setLines] = useState<CartLine[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">(qrTable ? "dine_in" : "takeaway");
   const [tableNumber, setTableNumber] = useState(qrTable ?? "");
@@ -61,6 +141,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [myOrder, setMyOrder] = useState<CustomerOrder | null>(null);
   const [myOrderCreds, setMyOrderCreds] = useState<{ id: string; token: string } | null>(null);
 
+  // Options-sheet state
+  const [optItem, setOptItem] = useState<MenuItem | null>(null);
+  const [optSel, setOptSel] = useState<Record<string, string[]>>({});
+
+  const t = STR[lang];
+  const rtl = lang === "ur";
+
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
     let cancelled = false;
@@ -71,24 +158,47 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       if (!rest) { setNotFound(true); setLoading(false); return; }
       const r = rest as Restaurant;
       setRestaurant(r);
-      setDark(r.theme === "dark");
+      setDarkPref(r.theme === "dark");
+      if (r.default_language === "ur") setLang("ur");
 
-      const [settingsRes, catsRes, itemsRes] = await Promise.all([
+      const [settingsRes, catsRes, itemsRes, groupsRes, planRes] = await Promise.all([
         supabase.from("restaurant_settings").select("*").eq("restaurant_id", r.id).single(),
         supabase.from("categories").select("*").eq("restaurant_id", r.id).eq("is_active", true)
           .order("display_order", { ascending: true }).order("created_at", { ascending: true }),
         supabase.from("menu_items").select("*").eq("restaurant_id", r.id)
           .order("display_order", { ascending: true }).order("created_at", { ascending: true }),
+        supabase.from("item_option_groups").select("*").eq("restaurant_id", r.id)
+          .order("display_order", { ascending: true }).order("created_at", { ascending: true }),
+        supabase.rpc("restaurant_plan_slug", { rid: r.id }),
       ]);
       if (cancelled) return;
       const s = (settingsRes.data as RestaurantSettings) ?? null;
       setSettings(s);
-      if (s) setDark(s.theme === "dark");
+      if (s) setDarkPref(s.theme === "dark");
       setCategories((catsRes.data as Category[]) ?? []);
       setItems((itemsRes.data as MenuItem[]) ?? []);
+      if (typeof planRes.data === "string") setPlanSlug(planRes.data);
+
+      // Attach options to their groups, grouped by item.
+      const groups = (groupsRes.data as ItemOptionGroup[]) ?? [];
+      if (groups.length > 0) {
+        const { data: opts } = await supabase.from("item_options").select("*")
+          .in("group_id", groups.map((g) => g.id)).eq("is_available", true)
+          .order("display_order", { ascending: true }).order("created_at", { ascending: true });
+        if (!cancelled) {
+          const allOpts = (opts as ItemOption[]) ?? [];
+          const map = new Map<string, GroupWithOptions[]>();
+          groups.forEach((g) => {
+            const withOpts: GroupWithOptions = { ...g, options: allOpts.filter((o) => o.group_id === g.id) };
+            const arr = map.get(g.menu_item_id) ?? [];
+            arr.push(withOpts);
+            map.set(g.menu_item_id, arr);
+          });
+          setGroupsByItem(map);
+        }
+      }
       setLoading(false);
 
-      // Is the signed-in viewer the owner? Owners are never analytics.
       try {
         const { data: u } = await supabase.auth.getUser();
         isOwnerRef.current = Boolean(u.user && u.user.id === r.owner_id);
@@ -108,8 +218,6 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
               visitorId = `${now.toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
               localStorage.setItem("menuqr_visitor", visitorId);
             }
-            // Resolve which QR code this was (public-read policy exists
-            // for published restaurants); failure just means unattributed.
             let resolvedQrId: string | null = null;
             const qrQuery = supabase.from("qr_codes").select("id")
               .eq("restaurant_id", r.id).eq("is_active", true);
@@ -130,13 +238,11 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         } catch { /* analytics must never break the menu */ }
       }
 
-      // ---------- Ordering availability (server-side gate) -----------
       try {
         const { data: avail } = await supabase.rpc("ordering_available", { rid: r.id });
         if (!cancelled) setOrdering(Boolean(avail));
       } catch { if (!cancelled) setOrdering(false); }
 
-      // ---------- Resume tracking a previously placed order ----------
       try {
         const saved = localStorage.getItem(`menuqr_order_${r.id}`);
         if (saved) {
@@ -149,7 +255,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  // ---------- Live order status polling (customer "notification") ----
+  // ---------- Live order status polling ----------------------------
   const refreshMyOrder = useCallback(async () => {
     if (!supabase || !myOrderCreds) return;
     const { data } = await supabase.rpc("get_customer_order", {
@@ -169,9 +275,14 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   useEffect(() => {
     if (!myOrderCreds) return;
     refreshMyOrder();
-    const t = setInterval(refreshMyOrder, 5000);
-    return () => clearInterval(t);
+    const tmr = setInterval(refreshMyOrder, 5000);
+    return () => clearInterval(tmr);
   }, [myOrderCreds, refreshMyOrder]);
+
+  // ---------- Theme -------------------------------------------------
+  const themeName = planSlug === "free" ? "classic" : (settings?.menu_theme ?? "classic");
+  const themeCfg = THEMES[themeName] ?? THEMES.classic;
+  const dark = themeCfg.dark ?? darkPref;
 
   const accent = settings?.primary_color || restaurant?.accent_color || "#0F766E";
   const showSearch = settings?.show_search ?? true;
@@ -199,19 +310,61 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     it.discount_price != null && Number(it.discount_price) < Number(it.price)
       ? Number(it.discount_price) : Number(it.price);
 
-  const cartEntries = useMemo(
-    () => Object.entries(cart).map(([id, qty]) => ({ item: items.find((i) => i.id === id)!, qty })).filter((e) => e.item),
-    [cart, items]);
-  const cartCount = cartEntries.reduce((n, e) => n + e.qty, 0);
-  const cartTotal = cartEntries.reduce((n, e) => n + priceOf(e.item) * e.qty, 0);
+  const cartCount = lines.reduce((n, l) => n + l.qty, 0);
+  const cartTotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
+  const itemQty = (itemId: string) => lines.filter((l) => l.item.id === itemId).reduce((n, l) => n + l.qty, 0);
 
-  function setQty(item: MenuItem, qty: number) {
-    setCart((c) => {
-      const next = { ...c };
-      if (qty <= 0) delete next[item.id]; else next[item.id] = Math.min(qty, 50);
-      return next;
+  function addLine(item: MenuItem, options: CartOption[], qty = 1) {
+    const key = item.id + "|" + options.map((o) => o.id).sort().join(",");
+    const unitPrice = priceOf(item) + options.reduce((n, o) => n + Number(o.price_delta), 0);
+    setLines((prev) => {
+      const existing = prev.find((l) => l.key === key);
+      if (existing) return prev.map((l) => (l.key === key ? { ...l, qty: Math.min(l.qty + qty, 50) } : l));
+      return [...prev, { key, item, qty, options, unitPrice }];
     });
   }
+
+  function setLineQty(key: string, qty: number) {
+    setLines((prev) => qty <= 0 ? prev.filter((l) => l.key !== key)
+      : prev.map((l) => (l.key === key ? { ...l, qty: Math.min(qty, 50) } : l)));
+  }
+
+  // Simple +/- for items without options (keeps the original fast flow).
+  function setSimpleQty(item: MenuItem, qty: number) {
+    const key = item.id + "|";
+    const existing = lines.find((l) => l.key === key);
+    if (!existing) { if (qty > 0) addLine(item, [], qty); return; }
+    setLineQty(key, qty);
+  }
+
+  function openOptions(item: MenuItem) {
+    const groups = groupsByItem.get(item.id) ?? [];
+    const initial: Record<string, string[]> = {};
+    groups.forEach((g) => {
+      // Pre-select the first option of required single-choice groups.
+      if (g.selection_type === "single" && g.is_required && g.options.length > 0) initial[g.id] = [g.options[0].id];
+      else initial[g.id] = [];
+    });
+    setOptSel(initial);
+    setOptItem(item);
+  }
+
+  function toggleOption(group: GroupWithOptions, opt: ItemOption) {
+    setOptSel((prev) => {
+      const cur = prev[group.id] ?? [];
+      if (group.selection_type === "single") return { ...prev, [group.id]: [opt.id] };
+      return { ...prev, [group.id]: cur.includes(opt.id) ? cur.filter((x) => x !== opt.id) : [...cur, opt.id] };
+    });
+  }
+
+  const optGroups = optItem ? (groupsByItem.get(optItem.id) ?? []) : [];
+  const optSelected: CartOption[] = optGroups.flatMap((g) =>
+    (optSel[g.id] ?? []).map((oid) => {
+      const o = g.options.find((x) => x.id === oid)!;
+      return { id: o.id, group_name: g.name, option_name: o.name, price_delta: Number(o.price_delta) };
+    }).filter(Boolean));
+  const optValid = optGroups.every((g) => !g.is_required || (optSel[g.id] ?? []).length > 0);
+  const optUnitPrice = optItem ? priceOf(optItem) + optSelected.reduce((n, o) => n + o.price_delta, 0) : 0;
 
   async function onItemTap(item: MenuItem) {
     setExpandedId((cur) => (cur === item.id ? null : item.id));
@@ -232,7 +385,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   async function placeOrder() {
     if (!supabase || !restaurant || placing) return;
     setOrderError(null);
-    if (cartEntries.length === 0) { setOrderError("Your cart is empty."); return; }
+    if (lines.length === 0) { setOrderError("Your cart is empty."); return; }
     if (orderType === "dine_in" && !tableNumber.trim()) { setOrderError("Please enter your table number."); return; }
     if (orderType === "takeaway") {
       if (!custName.trim()) { setOrderError("Please enter your name for the takeaway order."); return; }
@@ -248,19 +401,24 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         p_customer_phone: orderType === "takeaway" ? custPhone.trim() : (custPhone.trim() || null),
         p_note: note.trim() || null,
         p_qr_code_id: qrId,
-        p_items: cartEntries.map((e) => ({ menu_item_id: e.item.id, quantity: e.qty })),
+        p_items: lines.map((l) => ({
+          menu_item_id: l.item.id, quantity: l.qty,
+          option_ids: l.options.map((o) => o.id),
+        })),
       });
       if (error) throw error;
       const res = data as { order_id: string; customer_token: string };
       const creds = { id: res.order_id, token: res.customer_token };
       try { localStorage.setItem(`menuqr_order_${restaurant.id}`, JSON.stringify(creds)); } catch { /* ignore */ }
       setMyOrderCreds(creds);
-      setCart({});
+      setLines([]);
       setNote("");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not place the order.";
       if (msg.includes("ORDERING_NOT_AVAILABLE")) setOrderError("Ordering is not available for this restaurant right now.");
       else if (msg.includes("ITEM_UNAVAILABLE")) setOrderError("One of the items just became unavailable. Please review your cart and try again.");
+      else if (msg.includes("OPTION_REQUIRED")) setOrderError("One of your dishes needs a required choice (like a size). Please reopen it and choose.");
+      else if (msg.includes("INVALID_OPTION")) setOrderError("One of the chosen options is no longer available. Please review your cart and try again.");
       else if (msg.includes("TOO_MANY_ORDERS")) setOrderError("Too many orders in a short time. Please wait a few minutes or ask the staff for help.");
       else if (msg.includes("TABLE_REQUIRED")) setOrderError("Please enter your table number.");
       else if (msg.includes("PHONE_REQUIRED")) setOrderError("Please enter a valid phone number.");
@@ -271,21 +429,21 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     }
   }
 
-  // ---------- states ----------
+  // ---------- early states ------------------------------------------
   if (!isSupabaseConfigured) {
     return (
-      <Shell dark={false}>
+      <Shell dark={false} rtl={rtl}>
         <div className="mx-auto max-w-md px-4 py-20 text-center">
           <UtensilsCrossed className="mx-auto mb-3 text-slate-300" size={36} />
-          <h1 className="font-heading text-xl font-semibold">Menu unavailable</h1>
-          <p className="mt-2 text-sm text-slate-500">This menu service is not connected yet. Please check back shortly.</p>
+          <h1 className="font-heading text-xl font-semibold">{t.menuUnavailable}</h1>
+          <p className="mt-2 text-sm text-slate-500">{t.unavailableMsg}</p>
         </div>
       </Shell>
     );
   }
   if (loading) {
     return (
-      <Shell dark={false}>
+      <Shell dark={false} rtl={rtl}>
         <div className="mx-auto max-w-md animate-pulse px-4 py-10">
           <div className="h-40 rounded-3xl bg-slate-200" />
           <div className="mx-auto mt-4 h-6 w-48 rounded bg-slate-200" />
@@ -298,11 +456,11 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   }
   if (notFound || !restaurant) {
     return (
-      <Shell dark={false}>
+      <Shell dark={false} rtl={rtl}>
         <div className="mx-auto max-w-md px-4 py-20 text-center">
           <UtensilsCrossed className="mx-auto mb-3 text-slate-300" size={36} />
-          <h1 className="font-heading text-xl font-semibold">Menu not found</h1>
-          <p className="mt-2 text-sm text-slate-500">This restaurant menu is not published or the link is wrong. Please check the QR code and try again.</p>
+          <h1 className="font-heading text-xl font-semibold">{t.menuNotFound}</h1>
+          <p className="mt-2 text-sm text-slate-500">{t.notFoundMsg}</p>
         </div>
       </Shell>
     );
@@ -310,10 +468,20 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
 
   const waNumber = (restaurant.whatsapp ?? "").replace(/[^0-9]/g, "");
   const currency = restaurant.currency;
-  const cartBarVisible = ordering && cartCount > 0 && !sheetOpen;
+  const cartBarVisible = ordering && cartCount > 0 && !sheetOpen && !optItem;
+
+  const waOrderText = myOrder ? encodeURIComponent(
+    `${t.orderPlaced} — ${restaurant.name}\n` +
+    (myOrder.order_type === "dine_in" ? `${t.table} ${myOrder.table_number ?? ""}` : t.takeaway) + "\n" +
+    myOrder.items.map((i) =>
+      `• ${i.item_name} ×${i.quantity}` +
+      (i.options && i.options.length ? ` (${i.options.map((o) => o.option_name).join(", ")})` : "") +
+      ` — ${formatPrice(Number(i.subtotal), currency)}`).join("\n") +
+    `\n${t.total}: ${formatPrice(Number(myOrder.total_amount), currency)}`
+  ) : "";
 
   return (
-    <Shell dark={dark}>
+    <Shell dark={dark} rtl={rtl} bg={themeCfg.bg}>
       {/* Cover */}
       <div className="relative">
         {restaurant.cover_url ? (
@@ -322,10 +490,19 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         ) : (
           <div className="h-32 w-full sm:h-40" style={{ background: `linear-gradient(135deg, ${accent}, #101828)` }} />
         )}
-        <button type="button" onClick={() => setDark((d) => !d)} aria-label="Toggle theme"
-          className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur">
-          {dark ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+        <div className="absolute right-3 top-3 flex gap-2">
+          <button type="button" onClick={() => setLang((l) => (l === "en" ? "ur" : "en"))}
+            aria-label="Switch language"
+            className="flex h-10 items-center justify-center rounded-full bg-black/35 px-3.5 text-sm font-semibold text-white backdrop-blur">
+            {lang === "en" ? "اردو" : "EN"}
+          </button>
+          {themeCfg.dark === null && (
+            <button type="button" onClick={() => setDarkPref((d) => !d)} aria-label="Toggle theme"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur">
+              {dark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mx-auto w-full max-w-2xl px-4">
@@ -345,7 +522,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
               {restaurant.description && <p className={`mt-0.5 text-sm leading-snug ${dark ? "text-neutral-400" : "text-slate-500"}`}>{restaurant.description}</p>}
               {qrTable && (
                 <span className="mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-semibold text-white" style={{ background: accent }}>
-                  Table {qrTable}
+                  {t.table} {qrTable}
                 </span>
               )}
             </div>
@@ -360,12 +537,12 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         {/* Track-order banner */}
         {myOrderCreds && !sheetOpen && (
           <button type="button" onClick={() => setSheetOpen(true)}
-            className={`mt-4 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left shadow-card ${dark ? "bg-neutral-900" : "bg-white"}`}>
+            className={`mt-4 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"}`}>
             <ClipboardList size={20} style={{ color: accent }} className="shrink-0" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold">Your order</span>
+              <span className="block text-sm font-semibold">{t.yourOrder}</span>
               <span className={`block text-xs ${dark ? "text-neutral-400" : "text-slate-500"}`}>
-                {myOrder ? statusLabel(myOrder.status) : "Tap to check its status"}
+                {myOrder ? statusLabel(t, myOrder.status) : t.tapStatus}
                 {myOrder ? ` · ${formatPrice(Number(myOrder.total_amount), currency)}` : ""}
               </span>
             </span>
@@ -376,18 +553,19 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         {/* Search */}
         {showSearch && (
           <div className="relative mt-4">
-            <Search size={18} className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 ${dark ? "text-neutral-500" : "text-slate-400"}`} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search dishes…"
-              className={`w-full rounded-2xl border py-3 pl-11 pr-4 text-[15px] shadow-card ${dark ? "border-neutral-800 bg-neutral-900 text-white placeholder:text-neutral-500" : "border-slate-200 bg-white placeholder:text-slate-400"}`} />
+            <Search size={18} className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${rtl ? "right-3.5" : "left-3.5"} ${dark ? "text-neutral-500" : "text-slate-400"}`} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.search}
+              className={`w-full rounded-2xl border py-3 text-[15px] shadow-card ${rtl ? "pl-4 pr-11" : "pl-11 pr-4"} ${dark ? "border-neutral-800 bg-neutral-900 text-white placeholder:text-neutral-500" : "border-slate-200 bg-white placeholder:text-slate-400"}`} />
           </div>
         )}
 
         {/* Sticky category chips */}
-        <div className={`sticky top-0 z-30 -mx-4 mt-4 px-4 py-2.5 backdrop-blur ${dark ? "bg-neutral-950/90" : "bg-[#F6F7F9]/90"}`}>
+        <div className="sticky top-0 z-30 -mx-4 mt-4 px-4 py-2.5 backdrop-blur"
+          style={{ backgroundColor: dark ? "rgba(10,10,11,0.9)" : `${themeCfg.bg || "#F6F7F9"}E6` }}>
           <div className="no-scrollbar flex gap-2 overflow-x-auto">
-            <Chip label="All" active={activeCat === "all"} accent={accent} dark={dark} onClick={() => scrollToCategory("all")} />
+            <Chip label={t.all} active={activeCat === "all"} accent={accent} dark={dark} onClick={() => scrollToCategory("all")} />
             {showFeatured && featured.length > 0 && (
-              <Chip label="★ Featured" active={activeCat === "featured"} accent={accent} dark={dark} onClick={() => scrollToCategory("featured")} />
+              <Chip label={`★ ${t.featured}`} active={activeCat === "featured"} accent={accent} dark={dark} onClick={() => scrollToCategory("featured")} />
             )}
             {categories.map((c) => (
               <Chip key={c.id} label={c.name} active={activeCat === c.id} accent={accent} dark={dark} onClick={() => scrollToCategory(c.id)} />
@@ -399,27 +577,29 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         {items.length === 0 ? (
           <div className="py-14 text-center">
             <UtensilsCrossed className="mx-auto mb-3 text-slate-300" size={34} />
-            <p className="font-heading font-medium">Menu coming soon</p>
-            <p className={`mt-1 text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>This restaurant is still adding its dishes. Please check back shortly.</p>
+            <p className="font-heading font-medium">{t.menuSoon}</p>
+            <p className={`mt-1 text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>{t.menuSoonHint}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-14 text-center">
             <Search className="mx-auto mb-3 text-slate-300" size={34} />
-            <p className="font-heading font-medium">No dishes match “{search}”</p>
-            <p className={`mt-1 text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>Try a different search.</p>
+            <p className="font-heading font-medium">{t.noMatch}</p>
+            <p className={`mt-1 text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>{t.noMatchHint}</p>
           </div>
         ) : (
           <div className="pb-36 pt-2">
             {showFeatured && featured.length > 0 && (
               <section id="cat-featured" className="scroll-mt-20">
                 <h2 className="mb-3 flex items-center gap-1.5 font-heading text-lg font-semibold">
-                  <Star size={18} className="fill-amber-400 text-amber-400" /> Featured
+                  <Star size={18} className="fill-amber-400 text-amber-400" /> {t.featured}
                 </h2>
                 <div className="grid grid-cols-2 gap-3">
                   {featured.map((item) => (
-                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark}
+                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t}
                       expanded={expandedId === item.id} featured onTap={() => onItemTap(item)}
-                      ordering={ordering} qty={cart[item.id] ?? 0} onQty={(q) => setQty(item, q)} />
+                      ordering={ordering} qty={itemQty(item.id)}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
+                      onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
               </section>
@@ -433,9 +613,11 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                   <h2 className="mb-3 font-heading text-lg font-semibold">{cat.name}</h2>
                   <div className="space-y-3">
                     {list.map((item) => (
-                      <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark}
+                      <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t}
                         expanded={expandedId === item.id} onTap={() => onItemTap(item)}
-                        ordering={ordering} qty={cart[item.id] ?? 0} onQty={(q) => setQty(item, q)} />
+                        ordering={ordering} qty={itemQty(item.id)}
+                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
+                        onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                     ))}
                   </div>
                 </section>
@@ -444,12 +626,14 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
 
             {(byCategory.get("__none__") ?? []).length > 0 && (
               <section className="mt-8">
-                <h2 className="mb-3 font-heading text-lg font-semibold">More dishes</h2>
+                <h2 className="mb-3 font-heading text-lg font-semibold">{t.moreDishes}</h2>
                 <div className="space-y-3">
                   {(byCategory.get("__none__") ?? []).map((item) => (
-                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark}
+                    <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t}
                       expanded={expandedId === item.id} onTap={() => onItemTap(item)}
-                      ordering={ordering} qty={cart[item.id] ?? 0} onQty={(q) => setQty(item, q)} />
+                      ordering={ordering} qty={itemQty(item.id)}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0}
+                      onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
               </section>
@@ -468,27 +652,81 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           className="fixed inset-x-4 bottom-5 z-40 mx-auto flex min-h-[56px] w-auto max-w-2xl items-center gap-3 rounded-2xl px-5 py-3 font-semibold text-white shadow-pop"
           style={{ background: accent }}>
           <ShoppingBag size={21} />
-          <span className="flex-1 text-left">{cartCount} item{cartCount === 1 ? "" : "s"} · {formatPrice(cartTotal, currency)}</span>
-          <span className="text-sm">View cart & order</span>
+          <span className="flex-1 text-start">{cartCount} {cartCount === 1 ? t.item : t.items} · {formatPrice(cartTotal, currency)}</span>
+          <span className="text-sm">{t.viewCart}</span>
         </button>
       )}
 
       {/* WhatsApp floating button */}
       {whatsappEnabled && waNumber && !cartBarVisible && (
         <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer"
-          className="fixed bottom-5 right-4 z-40 flex min-h-[52px] items-center gap-2 rounded-full bg-[#25D366] px-5 py-3 font-semibold text-white shadow-pop">
-          <MessageCircle size={21} /> WhatsApp us
+          className={`fixed bottom-5 z-40 flex min-h-[52px] items-center gap-2 rounded-full bg-[#25D366] px-5 py-3 font-semibold text-white shadow-pop ${rtl ? "left-4" : "right-4"}`}>
+          <MessageCircle size={21} /> {t.whatsappUs}
         </a>
+      )}
+
+      {/* Options sheet (variations & add-ons) */}
+      {optItem && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={t.customize}>
+          <button type="button" aria-label="Close" onClick={() => setOptItem(null)} className="absolute inset-0 h-full w-full bg-black/55" />
+          <div className={`relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl p-5 sm:rounded-3xl ${dark ? "bg-neutral-900 text-white" : "bg-white text-ink"}`}>
+            <div className="mb-1 flex items-center gap-2">
+              <h2 className="flex-1 font-heading text-lg font-semibold">{optItem.name}</h2>
+              <button type="button" onClick={() => setOptItem(null)} aria-label="Close"
+                className={`flex h-10 w-10 items-center justify-center rounded-full ${dark ? "bg-neutral-800" : "bg-slate-100"}`}>
+                <X size={19} />
+              </button>
+            </div>
+            <p className={`text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>{t.customize} · {formatPrice(priceOf(optItem), currency)}</p>
+
+            {optGroups.map((g) => (
+              <div key={g.id} className="mt-5">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  {g.name}
+                  {g.is_required
+                    ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">{t.required}</span>
+                    : <span className={`text-xs font-normal ${dark ? "text-neutral-500" : "text-slate-400"}`}>{g.selection_type === "single" ? t.chooseOne : t.chooseMany}</span>}
+                </p>
+                <div className="mt-2 space-y-2">
+                  {g.options.map((o) => {
+                    const selected = (optSel[g.id] ?? []).includes(o.id);
+                    return (
+                      <button key={o.id} type="button" onClick={() => toggleOption(g, o)}
+                        className={`flex min-h-[48px] w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-start text-sm transition ${selected ? "font-semibold" : ""}`}
+                        style={selected ? { borderColor: accent, background: `${accent}14` } : { borderColor: dark ? "#333" : "#E2E8F0" }}>
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center border ${g.selection_type === "single" ? "rounded-full" : "rounded-md"}`}
+                          style={selected ? { background: accent, borderColor: accent } : { borderColor: dark ? "#555" : "#CBD5E1" }}>
+                          {selected && <Check size={13} className="text-white" />}
+                        </span>
+                        <span className="flex-1">{o.name}</span>
+                        {Number(o.price_delta) !== 0 && (
+                          <span style={{ color: accent }}>+{formatPrice(Number(o.price_delta), currency)}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <button type="button" disabled={!optValid}
+              onClick={() => { addLine(optItem, optSelected); setOptItem(null); }}
+              className="mt-6 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold text-white disabled:opacity-40"
+              style={{ background: accent }}>
+              <Plus size={18} /> {t.add} · {formatPrice(optUnitPrice, currency)}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Cart / checkout / order-status sheet */}
       {sheetOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label="Your order">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={t.yourOrder}>
           <button type="button" aria-label="Close" onClick={() => setSheetOpen(false)} className="absolute inset-0 h-full w-full bg-black/55" />
           <div className={`relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl p-5 sm:rounded-3xl ${dark ? "bg-neutral-900 text-white" : "bg-white text-ink"}`}>
             <div className="mb-4 flex items-center gap-2">
               <h2 className="flex-1 font-heading text-lg font-semibold">
-                {myOrderCreds && cartEntries.length === 0 ? "Your order" : "Your cart"}
+                {myOrderCreds && lines.length === 0 ? t.yourOrder : t.yourCart}
               </h2>
               <button type="button" onClick={() => setSheetOpen(false)} aria-label="Close"
                 className={`flex h-10 w-10 items-center justify-center rounded-full ${dark ? "bg-neutral-800" : "bg-slate-100"}`}>
@@ -497,10 +735,10 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
             </div>
 
             {/* Order status view */}
-            {myOrderCreds && cartEntries.length === 0 ? (
+            {myOrderCreds && lines.length === 0 ? (
               <div>
                 {!myOrder ? (
-                  <p className={`text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>Loading your order status…</p>
+                  <p className={`text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>{t.loadingStatus}</p>
                 ) : (
                   <div>
                     <div className={`rounded-2xl p-4 text-center ${myOrder.status === "confirmed" ? "bg-emerald-50 text-emerald-900" : myOrder.status === "cancelled" ? "bg-red-50 text-red-800" : myOrder.status === "completed" ? "bg-slate-100 text-slate-800" : "bg-amber-50 text-amber-900"}`}>
@@ -508,31 +746,44 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       {myOrder.status === "confirmed" && <ChefHat size={30} className="mx-auto text-emerald-600" />}
                       {myOrder.status === "completed" && <CheckCircle2 size={30} className="mx-auto text-slate-500" />}
                       {myOrder.status === "cancelled" && <Ban size={30} className="mx-auto text-red-500" />}
-                      <p className="mt-2 font-heading text-base font-bold">{statusLabel(myOrder.status)}</p>
+                      <p className="mt-2 font-heading text-base font-bold">{statusLabel(t, myOrder.status)}</p>
                       <p className="mt-1 text-sm">
-                        {myOrder.status === "pending" && "The restaurant has received your order. Keep this page open — it updates automatically when they confirm."}
-                        {myOrder.status === "confirmed" && "Good news — the restaurant confirmed your order and is preparing it."}
-                        {myOrder.status === "completed" && "This order is complete. Thank you!"}
-                        {myOrder.status === "cancelled" && "The restaurant could not accept this order. Please speak to the staff or try again."}
+                        {myOrder.status === "pending" && t.pendingMsg}
+                        {myOrder.status === "confirmed" && t.confirmedMsg}
+                        {myOrder.status === "completed" && t.completedMsg}
+                        {myOrder.status === "cancelled" && t.cancelledMsg}
                       </p>
                     </div>
                     <ul className="mt-4 space-y-2 text-sm">
                       {myOrder.items.map((oi, i) => (
-                        <li key={i} className="flex items-center gap-2">
-                          <span className="flex-1">{oi.item_name} <span className="text-slate-400">× {oi.quantity}</span></span>
-                          <span className="font-medium">{formatPrice(Number(oi.subtotal), currency)}</span>
+                        <li key={i}>
+                          <div className="flex items-center gap-2">
+                            <span className="flex-1">{oi.item_name} <span className="text-slate-400">× {oi.quantity}</span></span>
+                            <span className="font-medium">{formatPrice(Number(oi.subtotal), currency)}</span>
+                          </div>
+                          {oi.options && oi.options.length > 0 && (
+                            <p className={`mt-0.5 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>
+                              {oi.options.map((o) => `${o.group_name}: ${o.option_name}`).join(" · ")}
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ul>
                     <div className={`mt-3 flex items-center justify-between border-t pt-3 font-heading font-bold ${dark ? "border-neutral-800" : "border-slate-100"}`}>
-                      <span>Total {myOrder.order_type === "dine_in" && myOrder.table_number ? `· Table ${myOrder.table_number}` : myOrder.order_type === "takeaway" ? "· Takeaway" : ""}</span>
+                      <span>{t.total} {myOrder.order_type === "dine_in" && myOrder.table_number ? `· ${t.table} ${myOrder.table_number}` : myOrder.order_type === "takeaway" ? `· ${t.takeaway}` : ""}</span>
                       <span>{formatPrice(Number(myOrder.total_amount), currency)}</span>
                     </div>
-                    <p className={`mt-3 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>Pay at the counter. This page checks for updates every few seconds while it is open.</p>
+                    <p className={`mt-3 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payCounter}</p>
+                    {waNumber && (myOrder.status === "pending" || myOrder.status === "confirmed") && (
+                      <a href={`https://wa.me/${waNumber}?text=${waOrderText}`} target="_blank" rel="noreferrer"
+                        className="mt-4 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 font-semibold text-white">
+                        <MessageCircle size={19} /> {t.notifyWa}
+                      </a>
+                    )}
                     {(myOrder.status === "completed" || myOrder.status === "cancelled") && (
                       <button type="button" className="mt-4 w-full rounded-xl border px-4 py-3 text-sm font-medium"
                         onClick={() => { setMyOrderCreds(null); setMyOrder(null); try { localStorage.removeItem(`menuqr_order_${restaurant.id}`); } catch { /* ignore */ } }}>
-                        Start a new order
+                        {t.newOrder}
                       </button>
                     )}
                   </div>
@@ -541,60 +792,65 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
             ) : (
               /* Cart + checkout view */
               <div>
-                {cartEntries.length === 0 ? (
-                  <p className={`text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>Your cart is empty. Tap + on any dish to add it.</p>
+                {lines.length === 0 ? (
+                  <p className={`text-sm ${dark ? "text-neutral-400" : "text-slate-500"}`}>{t.cartEmpty}</p>
                 ) : (
                   <>
                     <ul className="space-y-3">
-                      {cartEntries.map(({ item, qty }) => (
-                        <li key={item.id} className="flex items-center gap-3">
+                      {lines.map((l) => (
+                        <li key={l.key} className="flex items-center gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">{item.name}</p>
-                            <p className="text-xs" style={{ color: accent }}>{formatPrice(priceOf(item), currency)}</p>
+                            <p className="truncate text-sm font-semibold">{l.item.name}</p>
+                            {l.options.length > 0 && (
+                              <p className={`truncate text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>
+                                {l.options.map((o) => o.option_name).join(", ")}
+                              </p>
+                            )}
+                            <p className="text-xs" style={{ color: accent }}>{formatPrice(l.unitPrice, currency)}</p>
                           </div>
-                          <QtyStepper qty={qty} accent={accent} dark={dark} onQty={(q) => setQty(item, q)} />
+                          <QtyStepper qty={l.qty} accent={accent} dark={dark} onQty={(q) => setLineQty(l.key, q)} />
                         </li>
                       ))}
                     </ul>
                     <div className={`mt-4 flex items-center justify-between border-t pt-3 font-heading font-bold ${dark ? "border-neutral-800" : "border-slate-100"}`}>
-                      <span>Total</span><span>{formatPrice(cartTotal, currency)}</span>
+                      <span>{t.total}</span><span>{formatPrice(cartTotal, currency)}</span>
                     </div>
 
                     {/* Order type */}
                     <div className={`mt-4 grid grid-cols-2 gap-2 rounded-2xl p-1.5 ${dark ? "bg-neutral-800" : "bg-slate-100"}`}>
-                      {(["dine_in", "takeaway"] as const).map((t) => (
-                        <button key={t} type="button" onClick={() => setOrderType(t)}
-                          className={`min-h-[44px] rounded-xl px-3 py-2 text-sm font-semibold ${orderType === t ? "text-white" : dark ? "text-neutral-300" : "text-slate-600"}`}
-                          style={orderType === t ? { background: accent } : undefined}>
-                          {t === "dine_in" ? "Dine-in (at table)" : "Takeaway"}
+                      {(["dine_in", "takeaway"] as const).map((tp) => (
+                        <button key={tp} type="button" onClick={() => setOrderType(tp)}
+                          className={`min-h-[44px] rounded-xl px-3 py-2 text-sm font-semibold ${orderType === tp ? "text-white" : dark ? "text-neutral-300" : "text-slate-600"}`}
+                          style={orderType === tp ? { background: accent } : undefined}>
+                          {tp === "dine_in" ? t.dineIn : t.takeaway}
                         </button>
                       ))}
                     </div>
 
                     {orderType === "dine_in" ? (
                       <div className="mt-4">
-                        <label className="mb-1.5 block text-sm font-medium" htmlFor="ord-table">Table number *</label>
+                        <label className="mb-1.5 block text-sm font-medium" htmlFor="ord-table">{t.tableNumber} *</label>
                         <input id="ord-table" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} inputMode="numeric"
                           placeholder="e.g. 5" className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
-                        <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-name1">Your name (optional)</label>
+                        <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-name1">{t.yourNameOpt}</label>
                         <input id="ord-name1" value={custName} onChange={(e) => setCustName(e.target.value)}
-                          placeholder="Name" className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
+                          placeholder={t.namePh} className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
                       </div>
                     ) : (
                       <div className="mt-4">
-                        <label className="mb-1.5 block text-sm font-medium" htmlFor="ord-name2">Your name *</label>
+                        <label className="mb-1.5 block text-sm font-medium" htmlFor="ord-name2">{t.yourName} *</label>
                         <input id="ord-name2" value={custName} onChange={(e) => setCustName(e.target.value)}
-                          placeholder="Name" className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
-                        <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-phone">Phone number *</label>
+                          placeholder={t.namePh} className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
+                        <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-phone">{t.phone} *</label>
                         <input id="ord-phone" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} inputMode="tel"
                           placeholder="03xx xxxxxxx" className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
-                        <p className={`mt-1.5 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>The restaurant uses this only to contact you about this order.</p>
+                        <p className={`mt-1.5 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.phoneHint}</p>
                       </div>
                     )}
 
-                    <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-note">Note (optional)</label>
+                    <label className="mb-1.5 mt-4 block text-sm font-medium" htmlFor="ord-note">{t.note}</label>
                     <textarea id="ord-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2}
-                      placeholder="e.g. Less spicy, extra raita…"
+                      placeholder={t.notePh}
                       className={`w-full rounded-xl border px-3.5 py-3 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
 
                     {orderError && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{orderError}</p>}
@@ -602,13 +858,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <button type="button" onClick={placeOrder} disabled={placing}
                       className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold text-white disabled:opacity-50"
                       style={{ background: accent }}>
-                      <ShoppingBag size={19} /> {placing ? "Placing order…" : `Place order · ${formatPrice(cartTotal, currency)}`}
+                      <ShoppingBag size={19} /> {placing ? t.placing : `${t.placeOrder} · ${formatPrice(cartTotal, currency)}`}
                     </button>
-                    <p className={`mt-2.5 text-center text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>No online payment — pay at the counter. The restaurant must confirm your order.</p>
+                    <p className={`mt-2.5 text-center text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payNote}</p>
 
                     {myOrderCreds && (
-                      <button type="button" onClick={() => setCart({})} className="mt-3 w-full text-center text-sm font-medium underline">
-                        Track my previous order instead
+                      <button type="button" onClick={() => setLines([])} className="mt-3 w-full text-center text-sm font-medium underline">
+                        {t.trackPrev}
                       </button>
                     )}
                   </>
@@ -622,13 +878,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   );
 }
 
-function statusLabel(status?: string | null): string {
+function statusLabel(t: Record<string, string>, status?: string | null): string {
   switch (status) {
-    case "pending": return "Waiting for confirmation";
-    case "confirmed": return "Confirmed — being prepared";
-    case "completed": return "Completed";
-    case "cancelled": return "Cancelled by the restaurant";
-    default: return "Order placed";
+    case "pending": return t.statusPending;
+    case "confirmed": return t.statusConfirmed;
+    case "completed": return t.statusCompleted;
+    case "cancelled": return t.statusCancelled;
+    default: return t.orderPlaced;
   }
 }
 
@@ -654,9 +910,11 @@ function QtyStepper({ qty, accent, dark, onQty }: { qty: number; accent: string;
   );
 }
 
-function Shell({ dark, children }: { dark: boolean; children: React.ReactNode }) {
+function Shell({ dark, rtl, bg, children }: { dark: boolean; rtl?: boolean; bg?: string; children: React.ReactNode }) {
   return (
-    <div className={`min-h-screen font-body ${dark ? "bg-neutral-950 text-white" : "bg-[#F6F7F9] text-ink"}`}>
+    <div dir={rtl ? "rtl" : "ltr"}
+      className={`min-h-screen font-body ${dark ? "bg-neutral-950 text-white" : "text-ink"}`}
+      style={!dark ? { backgroundColor: bg || "#F6F7F9" } : { backgroundColor: bg || undefined }}>
       {children}
       <p className={`pb-6 text-center text-[11px] ${dark ? "text-neutral-600" : "text-slate-400"}`}>Powered by Velora</p>
     </div>
@@ -673,10 +931,11 @@ function Chip({ label, active, accent, dark, onClick }: { label: string; active:
   );
 }
 
-function ItemCard({ item, currency, accent, dark, expanded, onTap, featured = false, ordering, qty, onQty }: {
-  item: MenuItem; currency: string; accent: string; dark: boolean;
+function ItemCard({ item, currency, accent, dark, t, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions }: {
+  item: MenuItem; currency: string; accent: string; dark: boolean; t: Record<string, string>;
   expanded: boolean; onTap: () => void; featured?: boolean;
-  ordering: boolean; qty: number; onQty: (q: number) => void;
+  ordering: boolean; qty: number; hasOptions: boolean;
+  onSimpleQty: (q: number) => void; onOptions: () => void;
 }) {
   const hasDiscount = item.discount_price != null && Number(item.discount_price) < Number(item.price);
   const priceBlock = (
@@ -689,14 +948,22 @@ function ItemCard({ item, currency, accent, dark, expanded, onTap, featured = fa
   );
 
   const addControl = ordering && item.is_available ? (
-    qty > 0 ? (
+    hasOptions ? (
+      <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={onOptions}
+          className="inline-flex min-h-[36px] items-center gap-1 rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white" style={{ background: accent }}>
+          <Plus size={15} /> {t.add}
+        </button>
+        {qty > 0 && <span className={`text-xs font-medium ${dark ? "text-neutral-400" : "text-slate-500"}`}>{qty} {t.inCart}</span>}
+      </div>
+    ) : qty > 0 ? (
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-        <QtyStepper qty={qty} accent={accent} dark={dark} onQty={onQty} />
+        <QtyStepper qty={qty} accent={accent} dark={dark} onQty={onSimpleQty} />
       </div>
     ) : (
-      <button type="button" onClick={(e) => { e.stopPropagation(); onQty(1); }}
+      <button type="button" onClick={(e) => { e.stopPropagation(); onSimpleQty(1); }}
         className="mt-2 inline-flex min-h-[36px] items-center gap-1 rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white" style={{ background: accent }}>
-        <Plus size={15} /> Add
+        <Plus size={15} /> {t.add}
       </button>
     )
   ) : null;
@@ -704,7 +971,7 @@ function ItemCard({ item, currency, accent, dark, expanded, onTap, featured = fa
   if (featured) {
     return (
       <div onClick={onTap} role="button" tabIndex={0}
-        className={`fade-up cursor-pointer overflow-hidden rounded-2xl text-left shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
+        className={`fade-up cursor-pointer overflow-hidden rounded-2xl text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
         {item.image_url
           ? // eslint-disable-next-line @next/next/no-img-element
             <img src={item.image_url} alt={item.name} className="h-28 w-full object-cover" loading="lazy" />
@@ -713,7 +980,7 @@ function ItemCard({ item, currency, accent, dark, expanded, onTap, featured = fa
           <p className="line-clamp-1 text-sm font-semibold">{item.name}</p>
           {expanded && item.description && <p className={`mt-1 text-xs leading-relaxed ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>}
           <div className="mt-1.5">{priceBlock}</div>
-          {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">Unavailable</span>}
+          {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{t.unavailableShort}</span>}
           {addControl}
         </div>
       </div>
@@ -722,7 +989,7 @@ function ItemCard({ item, currency, accent, dark, expanded, onTap, featured = fa
 
   return (
     <div onClick={onTap} role="button" tabIndex={0}
-      className={`fade-up flex w-full cursor-pointer gap-3 rounded-2xl p-3 text-left shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
+      className={`fade-up flex w-full cursor-pointer gap-3 rounded-2xl p-3 text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${item.is_available ? "" : "opacity-60"}`}>
       <div className="min-w-0 flex-1 py-0.5">
         <p className="flex items-center gap-1.5 text-[15px] font-semibold leading-snug">
           {item.name}
@@ -732,7 +999,7 @@ function ItemCard({ item, currency, accent, dark, expanded, onTap, featured = fa
           <p className={`mt-1 text-[13px] leading-relaxed ${expanded ? "" : "line-clamp-2"} ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>
         )}
         <div className="mt-2">{priceBlock}</div>
-        {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">Currently unavailable</span>}
+        {!item.is_available && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{t.unavailable}</span>}
         {addControl}
       </div>
       {item.image_url
