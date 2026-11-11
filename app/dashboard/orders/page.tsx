@@ -218,7 +218,7 @@ export default function OrdersPage() {
           <p className="text-xs leading-relaxed text-slate-400">
             New orders play a sound and appear automatically on this page. When you confirm, the customer
             sees “Confirmed — being prepared” on their phone while their order page is open. Payment is at
-            the counter — MenuQR does not take online payment for orders yet.
+            the counter — Velora does not take online payment for orders yet.
           </p>
         </div>
       )}
