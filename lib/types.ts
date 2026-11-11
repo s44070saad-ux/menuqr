@@ -72,6 +72,8 @@ export interface RestaurantSettings {
   prep_time_minutes?: number;
   /** Phase 2.3: owner-set Google review link shown after completed orders. */
   google_review_url?: string | null;
+  /** Phase 2.4: IANA timezone for availability windows and schedules. */
+  timezone?: string;
   qr_color: string;
   card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
@@ -137,6 +139,9 @@ export interface MenuItem {
   calories?: number | null;
   /** Phase 2.1: owner-picked "pairs well with" item ids for upselling. */
   suggested_item_ids?: string[];
+  /** Phase 2.4: daily availability window (restaurant-local "HH:MM:SS"). */
+  available_from?: string | null;
+  available_to?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -185,6 +190,21 @@ export interface OrderItem {
   subtotal: number;
   via_upsell?: boolean;
   options_snapshot?: ChosenOption[];
+  created_at: string;
+}
+
+export interface PriceSchedule {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  /** Weekday numbers, 0 = Sunday … 6 = Saturday (SQL extract(dow)). */
+  days: number[];
+  start_time: string;
+  end_time: string;
+  discount_percent: number;
+  category_id: string | null;
+  menu_item_id: string | null;
+  is_active: boolean;
   created_at: string;
 }
 
