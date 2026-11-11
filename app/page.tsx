@@ -9,7 +9,7 @@ import {
 const PLANS = [
   {
     name: "Free", price: "PKR 0", period: "forever", highlight: false,
-    features: ["15 menu items", "1 restaurant", "Basic QR code", "Basic menu design", "Platform branding"],
+    features: ["5 menu items", "1 restaurant", "Basic QR code", "Basic menu design", "Platform branding"],
   },
   {
     name: "Starter", price: "PKR 999", period: "/month", highlight: true,
@@ -76,7 +76,7 @@ export default function LandingPage() {
             See how it works
           </a>
         </div>
-        <p className="mt-4 text-sm text-slate-500">Free plan: 15 menu items · 1 restaurant · permanent QR included</p>
+        <p className="mt-4 text-sm text-slate-500">Free plan: 5 menu items · 1 restaurant · permanent QR included</p>
 
         {/* Hero visual: stylised phone menu mock (pure CSS, no fake data claims) */}
         <div className="mx-auto mt-10 max-w-sm rounded-[2rem] border border-slate-200 bg-appbg p-3 shadow-pop">
