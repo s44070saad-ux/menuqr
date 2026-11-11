@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Loader2, Pencil, Plus, Search, SlidersHorizontal, Star, Store, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileText, Loader2, Pencil, Plus, Search, SlidersHorizontal, Star, Store, Trash2, Upload } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import ImageField from "@/components/ImageField";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnGhost, btnPrimary, inputCls, labelCls } from "@/components/ui";
@@ -10,6 +10,8 @@ import { useOwner } from "@/lib/useOwner";
 import { formatPrice } from "@/lib/utils";
 import type { Category, ItemOption, ItemOptionGroup, MenuItem } from "@/lib/types";
 import { ALLERGENS, DIETARY } from "@/lib/allergens";
+import { menuCsvTemplate, menuRowsToCsv, parseMenuCsv, type MenuCsvRow } from "@/lib/menuCsv";
+import { useRef } from "react";
 
 interface GroupWithOptions extends ItemOptionGroup { options: ItemOption[] }
 
@@ -66,6 +68,94 @@ export default function MenuItemsPage() {
   const set = (k: keyof ItemForm, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   function resetForm() { setEditing(null); setForm(EMPTY); }
+
+  // ---------- Menu CSV import / export (Phase 1.3) -------------------
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  function downloadFile(name: string, text: string) {
+    const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCsv() {
+    if (!restaurant) return;
+    const rows: MenuCsvRow[] = items.map((it) => ({
+      name: it.name,
+      category: it.category_id ? (categories.find((c) => c.id === it.category_id)?.name ?? "") : "",
+      description: it.description ?? "",
+      price: Number(it.price),
+      discount_price: it.discount_price == null ? null : Number(it.discount_price),
+      is_available: it.is_available,
+      is_featured: it.is_featured,
+      calories: it.calories ?? null,
+      allergens: it.allergens ?? [],
+      dietary: it.dietary ?? [],
+      display_order: it.display_order,
+    }));
+    downloadFile(`${restaurant.slug}-menu.csv`, menuRowsToCsv(rows));
+  }
+
+  async function importCsv(file: File) {
+    if (!supabase || !restaurant) return;
+    setImporting(true); setError(null); setSuccess(null);
+    try {
+      const text = await file.text();
+      const { rows, errors } = parseMenuCsv(text);
+      if (rows.length === 0) {
+        setError(errors[0] ?? "No importable rows found in that file.");
+        return;
+      }
+      // Plan limit: count only NEW items (upsert by name).
+      const existingByName = new Map(items.map((i) => [i.name.trim().toLowerCase(), i]));
+      const newCount = rows.filter((r) => !existingByName.has(r.name.trim().toLowerCase())).length;
+      if (maxItems !== null && items.length + newCount > maxItems) {
+        setError(`This import would take you to ${items.length + newCount} items, over your ${plan?.name ?? "Free"} plan limit of ${maxItems}. Upgrade the plan or import fewer new dishes. Nothing was imported.`);
+        return;
+      }
+      // Resolve categories by name, creating missing ones.
+      const catByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.id]));
+      const wantedCats = [...new Set(rows.map((r) => r.category.trim()).filter(Boolean))];
+      for (const name of wantedCats) {
+        if (catByName.has(name.toLowerCase())) continue;
+        const { data, error: cErr } = await supabase.from("categories")
+          .insert({ restaurant_id: restaurant.id, name, display_order: categories.length + wantedCats.indexOf(name) })
+          .select("id").single();
+        if (cErr || !data) { setError(`Could not create category "${name}": ${cErr?.message ?? "unknown error"}`); return; }
+        catByName.set(name.toLowerCase(), data.id as string);
+      }
+      let added = 0; let updated = 0;
+      for (const r of rows) {
+        const payload = {
+          name: r.name, description: r.description || null,
+          price: r.price, discount_price: r.discount_price,
+          category_id: r.category ? (catByName.get(r.category.trim().toLowerCase()) ?? null) : null,
+          is_available: r.is_available, is_featured: r.is_featured,
+          calories: r.calories, allergens: r.allergens, dietary: r.dietary,
+          display_order: r.display_order,
+        };
+        const existing = existingByName.get(r.name.trim().toLowerCase());
+        const { error: iErr } = existing
+          ? await supabase.from("menu_items").update(payload).eq("id", existing.id)
+          : await supabase.from("menu_items").insert({ ...payload, restaurant_id: restaurant.id });
+        if (iErr) { errors.push(`"${r.name}": ${iErr.message}`); continue; }
+        if (existing) updated++; else added++;
+      }
+      await load();
+      setSuccess(`Import complete: ${added} dish${added === 1 ? "" : "es"} added, ${updated} updated. Your public menu is already showing the changes.`);
+      if (errors.length > 0) {
+        setError(`${errors.length} row${errors.length === 1 ? "" : "s"} skipped: ${errors.slice(0, 4).join(" ")}${errors.length > 4 ? " …" : ""}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed.");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -242,6 +332,20 @@ export default function MenuItemsPage() {
         <div className="space-y-5">
           <ErrorBox message={error} />
           <SuccessBox message={success} />
+
+          <Card className="flex flex-wrap items-center gap-2 !py-3">
+            <span className="font-heading text-sm font-semibold text-ink">Menu file (CSV)</span>
+            <span className="min-w-40 flex-1 text-xs leading-snug text-slate-500">
+              Export your menu, edit it in Excel or Google Sheets, and import it back — or import a whole new menu at once. Importing updates dishes with the same name and adds new ones.
+            </span>
+            <button type="button" onClick={exportCsv} className={btnGhost}><Download size={16} /> Export CSV</button>
+            <button type="button" onClick={() => downloadFile("velora-menu-template.csv", menuCsvTemplate())} className={btnGhost}><FileText size={16} /> Template</button>
+            <button type="button" disabled={importing} onClick={() => fileRef.current?.click()} className={btnPrimary}>
+              {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} Import CSV
+            </button>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); }} />
+          </Card>
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-white px-3 py-1.5 font-medium text-slate-700 shadow-card">
