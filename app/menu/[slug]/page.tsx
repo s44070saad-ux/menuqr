@@ -12,6 +12,7 @@ import type {
 } from "@/lib/types";
 import { ALLERGENS, DIETARY, allergenLabel, dietaryLabel } from "@/lib/allergens";
 import { bestDiscountPct, effectivePrice, fmtTime12, itemWithinWindow } from "@/lib/schedules";
+import BookingPanel from "@/components/BookingPanel";
 import type { PriceSchedule } from "@/lib/types";
 
 /**
@@ -953,6 +954,16 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
             {restaurant.phone && <p className="flex items-center gap-2"><Phone size={14} className="shrink-0" /> {restaurant.phone}</p>}
           </div>
         </div>
+
+        {/* Phase 6: reservations + catering (owner-enabled, Pro+) */}
+        <BookingPanel
+          restaurantId={restaurant.id}
+          accent={accent}
+          dark={dark}
+          lang={lang}
+          reservationsOn={Boolean(settings?.reservations_enabled) && (planSlug === "pro" || planSlug === "business")}
+          cateringOn={Boolean(settings?.catering_enabled) && (planSlug === "pro" || planSlug === "business")}
+        />
 
         {/* Track-order banner */}
         {myOrderCreds && !sheetOpen && (
