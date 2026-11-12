@@ -118,6 +118,28 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     Write; optional webhook to `/api/stripe/webhook` for the
     `checkout.session.completed` / `checkout.session.expired`
     events). Velora never touches the money.
+20. **Then run the Phase 5 migrations the same way, in this order:**
+    `supabase/migration-phase5-i18n.sql` (translation tables +
+    `restaurant_settings.menu_languages`) and
+    `supabase/migration-phase5-square.sql` (Square columns on
+    settings/secrets + `orders.square_order_id`).
+21. **Menu languages (optional):** owners enable Spanish/French/
+    German/Italian in Dashboard → Items → Menu languages and press
+    Auto-translate. Translations come from the free MyMemory API
+    and are cached in the database forever. Set `TRANSLATE_EMAIL`
+    in Vercel env to raise the free quota to ~10,000 words/day
+    (a full menu is a few hundred words).
+22. **Square POS (optional, for the platform owner):** create a
+    Square developer account (developer.squareup.com — developers
+    outside Square's seller countries may still build OAuth apps
+    for sellers in supported countries, as long as the app itself
+    takes no payments), create an application with redirect URI
+    `<site>/api/square/callback`, and set `SQUARE_APPLICATION_ID`,
+    `SQUARE_APPLICATION_SECRET` and `SQUARE_ENVIRONMENT`
+    (`sandbox` while testing, `production` live) in Vercel env,
+    then redeploy. Restaurants then connect from Dashboard →
+    Orders → Square POS and pick a location; orders get a
+    "Send to Square" button. OAuth tokens refresh automatically.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
