@@ -3,7 +3,7 @@ import {
   QrCode, Smartphone, RefreshCw, BarChart3, Image as ImageIcon, ShieldCheck,
   Check, X, ArrowRight, Store, MousePointerClick, Printer, Globe, Zap, Wallet,
   ClipboardList, ChefHat, SlidersHorizontal, Palette, Languages, MessageCircle,
-  MousePointer2, Sparkles, Flame, TicketPercent, Users,
+  MousePointer2, Sparkles, Flame, TicketPercent, Users, CalendarCheck, MonitorSmartphone, Building2,
 } from "lucide-react";
 import HeroQr from "@/components/HeroQr";
 
@@ -46,6 +46,9 @@ const FEATURES = [
   { icon: Users, title: "Your customer database", text: "Every order builds your own customer list — names, phones, consented emails, spend history — exportable any time, plus win-back emails for guests who go quiet." },
   { icon: Languages, title: "Menus in 5 languages", text: "English and Urdu built in, plus Spanish, French, German and Italian auto-translated from your own menu text and cached forever. Your guest's phone language is detected automatically." },
   { icon: Globe, title: "One menu everywhere", text: "The same live menu on your tables (QR), your website (embeddable widget), your Google profile and your social bios. Change a price once — it updates everywhere." },
+  { icon: CalendarCheck, title: "Table reservations & catering", text: "Guests book a table from your menu and watch their confirmation live; big-event enquiries land in your dashboard with budget and guest count attached." },
+  { icon: MonitorSmartphone, title: "Counter ordering (POS)", text: "Staff take walk-in and phone orders on a fast till screen — priced by the server, confirmed instantly, and already on the kitchen display." },
+  { icon: Building2, title: "Multi-location menus", text: "Clone your menu into a new branch in one click, then sync prices and availability across locations — while each branch keeps its own copy to adjust." },
 ];
 
 const STEPS = [
@@ -66,6 +69,9 @@ const COMPARE: { label: string; velora: string; qlinko: string; win?: boolean }[
   { label: "Coupons, gift cards & loyalty stamps", velora: "Yes (Pro)", qlinko: "Not available", win: true },
   { label: "Menu auto-translated (ES/FR/DE/IT)", velora: "Yes", qlinko: "Not available", win: true },
   { label: "Embeddable website menu widget", velora: "Yes", qlinko: "Not available", win: true },
+  { label: "Table reservations guests can track", velora: "Yes (Pro)", qlinko: "Not working", win: true },
+  { label: "Counter (POS) order entry", velora: "Yes (Pro)", qlinko: "Not available", win: true },
+  { label: "Multi-location clone & sync", velora: "Yes (Business)", qlinko: "Not available", win: true },
   { label: "Customer database you own & can export", velora: "Yes — built automatically from orders", qlinko: "Not available", win: true },
   { label: "Kitchen display (KDS)", velora: "Yes (Pro)", qlinko: "Yes (Professional)" },
   { label: "Urdu menus", velora: "Yes", qlinko: "Yes" },
