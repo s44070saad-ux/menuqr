@@ -804,10 +804,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           });
           const out = (await res2.json().catch(() => ({}))) as { url?: string };
           if (res2.ok && out.url) { window.location.href = out.url; return; }
+          // The API answered with an error (restaurant not connected,
+          // platform not configured…). The status sheet opens over the
+          // cart, so the notice must live IN the sheet or the customer
+          // never sees it — set BOTH states (Phase 4/5 QA catch).
+          setPayNotice(true);
           setOrderError(t.cardStartFailed);
         } catch {
-          // The status sheet opens over the cart, so the notice must live
-          // IN the sheet or the customer never sees it (Phase 4 QA catch).
           setPayNotice(true);
         }
       }
@@ -1530,7 +1533,9 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       style={{ background: accent }}>
                       <ShoppingBag size={19} /> {placing ? t.placing : `${t.placeOrder} · ${formatPrice(grandTotal, currency)}`}
                     </button>
-                    <p className={`mt-2.5 text-center text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payNote}</p>
+                    {(!settings?.stripe_enabled || payMethod === "counter") && (
+                      <p className={`mt-2.5 text-center text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payNote}</p>
+                    )}
 
                     {myOrderCreds && (
                       <button type="button" onClick={() => setLines([])} className="mt-3 w-full text-center text-sm font-medium underline">
