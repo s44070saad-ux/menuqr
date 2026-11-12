@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import PrintTicket from "@/components/PrintTicket";
+import StripeCard from "@/components/StripeCard";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnPrimary } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
@@ -78,6 +79,16 @@ export default function OrdersPage() {
     const t = setInterval(() => load(true), 10000);
     return () => { sb.removeChannel(channel); clearInterval(t); };
   }, [restaurant, load]);
+
+  const [stripeState, setStripeState] = useState<{ enabled: boolean; last4: string | null }>({ enabled: false, last4: null });
+  const loadStripeState = useCallback(async () => {
+    if (!supabase || !restaurant) return;
+    const { data } = await supabase.from("restaurant_settings")
+      .select("stripe_enabled, stripe_key_last4").eq("restaurant_id", restaurant.id).maybeSingle();
+    const d = data as { stripe_enabled?: boolean; stripe_key_last4?: string | null } | null;
+    setStripeState({ enabled: Boolean(d?.stripe_enabled), last4: d?.stripe_key_last4 ?? null });
+  }, [restaurant]);
+  useEffect(() => { loadStripeState(); }, [loadStripeState]);
 
   // Ordering on/off toggle (restaurant_settings.enable_ordering).
   useEffect(() => {
@@ -246,6 +257,8 @@ export default function OrdersPage() {
             </button>
           </Card>
 
+          <StripeCard restaurantId={restaurant.id} enabled={stripeState.enabled} keyLast4={stripeState.last4} onChanged={loadStripeState} />
+
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
             <Card className="!p-4 text-center">
@@ -371,7 +384,16 @@ function OrderCard({ order: o, currency, busy, onStatus, onPrint }: {
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
         <span className="font-heading text-base font-bold text-ink">{formatPrice(Number(o.total_amount), currency)}</span>
-        <span className="text-xs text-slate-400">pay at counter</span>
+        {Number(o.tip_amount ?? 0) > 0 && <span className="text-xs text-slate-400">incl. tip {formatPrice(Number(o.tip_amount), currency)}</span>}
+        {o.payment_status === "paid" ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">PAID · CARD</span>
+        ) : o.payment_status === "pending_card" ? (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">CARD PAYMENT PENDING</span>
+        ) : o.payment_status === "failed" ? (
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-600">CARD FAILED — COLLECT AT COUNTER</span>
+        ) : (
+          <span className="text-xs text-slate-400">pay at counter</span>
+        )}
         <span className="ml-auto flex flex-wrap gap-2">
           <button type="button" onClick={() => onPrint("kitchen")}
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
