@@ -2,11 +2,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Store, ClipboardList, Phone, Check, CheckCheck, X, Lock, RefreshCw, BellRing, Printer,
+  Store, ClipboardList, Phone, Check, CheckCheck, CheckCircle2, Loader2, X, Lock, RefreshCw, BellRing, Printer,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import PrintTicket from "@/components/PrintTicket";
 import StripeCard from "@/components/StripeCard";
+import SquareCard from "@/components/SquareCard";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnPrimary } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
 import { useOwner } from "@/lib/useOwner";
@@ -89,6 +90,44 @@ export default function OrdersPage() {
     setStripeState({ enabled: Boolean(d?.stripe_enabled), last4: d?.stripe_key_last4 ?? null });
   }, [restaurant]);
   useEffect(() => { loadStripeState(); }, [loadStripeState]);
+
+  // Phase 5: Square POS state.
+  const [squareState, setSquareState] = useState<{ enabled: boolean; locationName: string | null; merchantId: string | null }>({ enabled: false, locationName: null, merchantId: null });
+  const loadSquareState = useCallback(async () => {
+    if (!supabase || !restaurant) return;
+    const { data } = await supabase.from("restaurant_settings")
+      .select("square_enabled, square_location_name, square_merchant_id").eq("restaurant_id", restaurant.id).maybeSingle();
+    const d = data as { square_enabled?: boolean; square_location_name?: string | null; square_merchant_id?: string | null } | null;
+    setSquareState({ enabled: Boolean(d?.square_enabled), locationName: d?.square_location_name ?? null, merchantId: d?.square_merchant_id ?? null });
+  }, [restaurant]);
+  useEffect(() => { loadSquareState(); }, [loadSquareState]);
+
+  const [squareBusyId, setSquareBusyId] = useState<string | null>(null);
+  async function pushToSquare(order: Order) {
+    if (!supabase || squareBusyId) return;
+    setSquareBusyId(order.id); setError(null); setSuccess(null);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) { setError("Your session expired — sign in again."); return; }
+      const res = await fetch("/api/square/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const json = (await res.json()) as { ok?: boolean; already?: boolean; error?: string };
+      if (res.ok && json.ok) {
+        setSuccess(json.already ? "That order is already in Square." : "Order sent to Square.");
+        await load(true);
+      } else {
+        setError(json.error === "PLATFORM_NOT_CONFIGURED" ? "Square isn't configured on the platform yet."
+          : json.error === "NOT_CONNECTED" ? "Square connection expired — reconnect it in the Square card above."
+          : json.error === "SQUARE_NOT_READY" ? "Choose a Square location in the Square card above first."
+          : "Could not send that order to Square. Please try again.");
+      }
+    } catch { setError("Could not send that order to Square. Please try again."); }
+    finally { setSquareBusyId(null); }
+  }
 
   // Ordering on/off toggle (restaurant_settings.enable_ordering).
   useEffect(() => {
@@ -259,6 +298,8 @@ export default function OrdersPage() {
 
           <StripeCard restaurantId={restaurant.id} enabled={stripeState.enabled} keyLast4={stripeState.last4} onChanged={loadStripeState} />
 
+          <SquareCard restaurantId={restaurant.id} squareEnabled={squareState.enabled} locationName={squareState.locationName} merchantId={squareState.merchantId} onChanged={loadSquareState} />
+
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
             <Card className="!p-4 text-center">
@@ -298,7 +339,9 @@ export default function OrdersPage() {
               {visible.map((o) => (
                 <OrderCard key={o.id} order={o} currency={restaurant.currency} busy={busyId === o.id}
                   onStatus={(s) => setStatus(o, s)}
-                  onPrint={(kind) => setPrintReq({ order: o, kind })} />
+                  onPrint={(kind) => setPrintReq({ order: o, kind })}
+                  squareOn={squareState.enabled} squareBusy={squareBusyId === o.id}
+                  onSquare={() => pushToSquare(o)} />
               ))}
             </div>
           )}
@@ -334,9 +377,10 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-function OrderCard({ order: o, currency, busy, onStatus, onPrint }: {
+function OrderCard({ order: o, currency, busy, onStatus, onPrint, squareOn, squareBusy, onSquare }: {
   order: Order; currency: string; busy: boolean; onStatus: (s: OrderStatus) => void;
   onPrint: (kind: "kitchen" | "receipt") => void;
+  squareOn?: boolean; squareBusy?: boolean; onSquare?: () => void;
 }) {
   return (
     <Card className={o.status === "pending" ? "ring-2 ring-amber-300" : ""}>
@@ -403,6 +447,16 @@ function OrderCard({ order: o, currency, busy, onStatus, onPrint }: {
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600">
             <Printer size={15} /> Receipt
           </button>
+          {squareOn && (o.square_order_id ? (
+            <span className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+              <CheckCircle2 size={15} /> In Square
+            </span>
+          ) : o.status !== "cancelled" ? (
+            <button type="button" disabled={squareBusy} onClick={onSquare}
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 disabled:opacity-50">
+              {squareBusy ? <Loader2 size={15} className="animate-spin" /> : <Store size={15} />} Send to Square
+            </button>
+          ) : null)}
           {o.status === "pending" && (
             <>
               <button type="button" disabled={busy} onClick={() => onStatus("confirmed")}
