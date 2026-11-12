@@ -34,9 +34,13 @@ import type { PriceSchedule } from "@/lib/types";
  *   classic. EN/Urdu chrome toggle; dish text stays owner-entered.
  */
 
-type Lang = "en" | "ur";
+type Lang = "en" | "ur" | "es" | "fr" | "de" | "it";
+/** Languages with owner-enabled stored translations (Phase 5). */
+const TR_LANGS = ["es", "fr", "de", "it"] as const;
+type TrLang = (typeof TR_LANGS)[number];
+const TR_LABEL: Record<TrLang, string> = { es: "ES", fr: "FR", de: "DE", it: "IT" };
 
-const STR: Record<Lang, Record<string, string>> = {
+const STR: Record<"en" | "ur" | "es", Record<string, string>> = {
   en: {
     search: "Search dishes…", all: "All", featured: "Featured", moreDishes: "More dishes",
     menuSoon: "Menu coming soon", menuSoonHint: "This restaurant is still adding its dishes. Please check back shortly.",
@@ -136,6 +140,56 @@ const STR: Record<Lang, Record<string, string>> = {
     orderPlaced: "آرڈر ہو گیا", menuNotFound: "مینیو نہیں ملا",
     notFoundMsg: "یہ مینیو شائع نہیں ہے یا لنک غلط ہے۔ QR کوڈ چیک کر کے دوبارہ کوشش کریں۔",
     menuUnavailable: "مینیو دستیاب نہیں", unavailableMsg: "یہ سروس ابھی منسلک نہیں ہے۔ براہ کرم کچھ دیر بعد دیکھیں۔",
+  },
+  es: {
+    search: "Buscar platos…", all: "Todo", featured: "Destacados", moreDishes: "Más platos",
+    menuSoon: "Menú próximamente", menuSoonHint: "Este restaurante aún está agregando sus platos. Vuelve a intentarlo en breve.",
+    noMatch: "Ningún plato coincide con tu búsqueda", noMatchHint: "Prueba con otra búsqueda.",
+    add: "Agregar", unavailable: "No disponible por ahora", unavailableShort: "No disponible", inCart: "en el carrito",
+    viewCart: "Ver carrito y pedir", item: "artículo", items: "artículos",
+    yourCart: "Tu carrito", yourOrder: "Tu pedido",
+    cartEmpty: "Tu carrito está vacío. Toca + en cualquier plato para agregarlo.",
+    total: "Total", subtotal: "Subtotal", tax: "Impuestos", serviceCharge: "Cargo por servicio", minOrderMsg: "Pedido mínimo {min} — agrega {more} más para pedir.",
+    dineIn: "Para comer aquí (en mesa)", takeaway: "Para llevar",
+    tableNumber: "Número de mesa", yourName: "Tu nombre", yourNameOpt: "Tu nombre (opcional)",
+    namePh: "Nombre", phone: "Número de teléfono", phoneHint: "El restaurante lo usa solo para contactarte sobre este pedido.",
+    note: "Nota (opcional)", notePh: "p. ej. Poco picante, raita extra…",
+    placeOrder: "Hacer pedido", placing: "Enviando pedido…",
+    payNote: "Sin pago en línea: paga en caja. El restaurante debe confirmar tu pedido.",
+    trackPrev: "Ver mi pedido anterior", table: "Mesa", whatsappUs: "Escríbenos por WhatsApp",
+    payCounter: "Paga en caja. Esta página se actualiza cada pocos segundos mientras está abierta.",
+    newOrder: "Comenzar un nuevo pedido", loadingStatus: "Cargando el estado de tu pedido…", tapStatus: "Toca para ver su estado",
+    notifyWa: "Enviar pedido al restaurante por WhatsApp", customize: "Personaliza tu plato",
+    required: "Obligatorio", chooseOne: "Elige uno", chooseMany: "Elige los que quieras",
+    popular: "Popular", pairsWellWith: "Combina bien con", orderAgain: "Pedir de nuevo",
+    enjoyedIt: "¿Te gustó la comida?", rateGoogle: "Califícanos en Google", privateFb: "Enviar comentarios privados",
+    fbPlaceholder: "Cuéntale al restaurante qué te pareció — solo ellos lo verán", fbSend: "Enviar comentarios",
+    fbThanks: "¡Gracias! Tus comentarios se enviaron al restaurante.", fbError: "No se pudieron enviar los comentarios. Inténtalo de nuevo.",
+    happyHour: "Hora feliz", availWindow: "Disponible {from} – {to}",
+    couponPh: "Código de cupón (opcional)", giftPh: "Código de tarjeta regalo (opcional)", applyBtn: "Aplicar",
+    discountApplied: "Descuentos aplicados", discountNone: "Ese código no aplica a este pedido.",
+    emailOpt: "Correo (opcional — recibo y ofertas)", emailConsent: "Enviarme ofertas de este restaurante",
+    loyaltyTitle: "Tus sellos de fidelidad", loyaltyReward: "¡Tienes una recompensa esperándote! Muestra esta pantalla en caja en tu próxima visita.",
+    loyaltyProgress: "sellos — {left} más para una recompensa",
+    tipLabel: "Agregar propina", noTip: "Ninguna", customTipPh: "Personalizada",
+    payCounterOpt: "Pagar en caja", payCardOpt: "Pagar ahora con tarjeta",
+    paidByCard: "Pagado con tarjeta", cardPending: "Pago con tarjeta pendiente",
+    cardCancelled: "El pago con tarjeta no se completó: tu pedido está hecho; paga en caja, por favor.",
+    cardStartFailed: "No se pudo iniciar el pago con tarjeta: tu pedido está hecho; paga en caja, por favor.",
+    reorderNote: "Estos artículos necesitan tus elecciones en el menú:",
+    stepReceived: "Recibido", stepPreparing: "Preparando", stepReady: "Listo",
+    readyBy: "Listo aproximadamente a las", readyNow: "Ya debería estar listo — pregunta en caja.",
+    statusPending: "Esperando confirmación", statusConfirmed: "Confirmado — en preparación",
+    statusCompleted: "Completado", statusCancelled: "Cancelado por el restaurante",
+    pendingMsg: "El restaurante recibió tu pedido. Mantén esta página abierta: se actualiza automáticamente cuando confirmen.",
+    confirmedMsg: "Buenas noticias: el restaurante confirmó tu pedido y lo está preparando.",
+    completedMsg: "Este pedido está completo. ¡Gracias!",
+    cancelledMsg: "El restaurante no pudo aceptar este pedido. Habla con el personal o inténtalo de nuevo.",
+    contains: "Contiene", avoidAllergen: "Evitar alérgeno:", anyAllergen: "Ninguno — mostrar todo",
+    bigText: "Texto más grande", privacyNote: "Este menú no usa cookies de seguimiento.",
+    orderPlaced: "Pedido realizado", menuNotFound: "Menú no encontrado",
+    notFoundMsg: "Este menú no está publicado o el enlace es incorrecto. Revisa el código QR e inténtalo de nuevo.",
+    menuUnavailable: "Menú no disponible", unavailableMsg: "Este servicio aún no está conectado. Vuelve en breve.",
   },
 };
 
@@ -253,10 +307,19 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   }
 
   // Options-sheet state
+  const [payNotice, setPayNotice] = useState(false);
   const [optItem, setOptItem] = useState<MenuItem | null>(null);
   const [optSel, setOptSel] = useState<Record<string, string[]>>({});
 
-  const t = STR[lang];
+  const t = STR[lang === "ur" ? "ur" : lang === "es" ? "es" : "en"];
+  // Phase 5: stored translations for the enabled languages.
+  const [itemTr, setItemTr] = useState<Map<string, { name: string; description: string | null }>>(new Map());
+  const [catTr, setCatTr] = useState<Map<string, string>>(new Map());
+  const trLang: TrLang | null = (TR_LANGS as readonly string[]).includes(lang) ? (lang as TrLang) : null;
+  const itemName = (it: MenuItem): string => (trLang && itemTr.get(`${it.id}:${trLang}`)?.name) || it.name;
+  const itemDesc = (it: MenuItem): string | null => (trLang ? (itemTr.get(`${it.id}:${trLang}`)?.description ?? it.description) : it.description);
+  const catName = (c: Category): string => (trLang && catTr.get(`${c.id}:${trLang}`)) || c.name;
+  const enabledTrLangs: TrLang[] = (settings?.menu_languages ?? []).filter((l): l is TrLang => (TR_LANGS as readonly string[]).includes(l));
   const rtl = lang === "ur";
 
   useEffect(() => {
@@ -288,6 +351,31 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       if (s) setDarkPref(s.theme === "dark");
       setCategories((catsRes.data as Category[]) ?? []);
       setItems((itemsRes.data as MenuItem[]) ?? []);
+      // Phase 5: fetch stored translations for the enabled languages and
+      // auto-pick the guest's phone language when the restaurant offers it.
+      const langs = ((s?.menu_languages ?? []) as string[]).filter((l) => (TR_LANGS as readonly string[]).includes(l)) as TrLang[];
+      if (langs.length > 0) {
+        try {
+          const itemIds = ((itemsRes.data as MenuItem[]) ?? []).map((i) => i.id);
+          const catIds = ((catsRes.data as Category[]) ?? []).map((c) => c.id);
+          const [{ data: itr }, { data: ctr }] = await Promise.all([
+            itemIds.length ? supabase.from("menu_item_translations").select("item_id,lang,name,description").in("item_id", itemIds).in("lang", langs) : Promise.resolve({ data: [] as unknown[] }),
+            catIds.length ? supabase.from("category_translations").select("category_id,lang,name").in("category_id", catIds).in("lang", langs) : Promise.resolve({ data: [] as unknown[] }),
+          ]);
+          if (!cancelled) {
+            const im = new Map<string, { name: string; description: string | null }>();
+            (itr as { item_id: string; lang: string; name: string; description: string | null }[] | null ?? []).forEach((row) => im.set(`${row.item_id}:${row.lang}`, { name: row.name, description: row.description }));
+            setItemTr(im);
+            const cm = new Map<string, string>();
+            (ctr as { category_id: string; lang: string; name: string }[] | null ?? []).forEach((row) => cm.set(`${row.category_id}:${row.lang}`, row.name));
+            setCatTr(cm);
+            const nav = (typeof navigator !== "undefined" ? navigator.language : "").slice(0, 2).toLowerCase();
+            if ((TR_LANGS as readonly string[]).includes(nav) && langs.includes(nav as TrLang) && r.default_language !== "ur") {
+              setLang(nav as Lang);
+            }
+          }
+        } catch { /* translations are an enhancement — never break the menu */ }
+      }
       if (typeof planRes.data === "string") {
         setPlanSlug(planRes.data);
         if (planRes.data === "pro" || planRes.data === "business") {
@@ -450,7 +538,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     [items]);
 
   const filtered = useMemo(() => items.filter((it) => {
-    if (search && !(it.name + " " + (it.description ?? "")).toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !((itemName(it) + " " + (itemDesc(it) ?? "") + " " + it.name + " " + (it.description ?? "")).toLowerCase().includes(search.toLowerCase()))) return false;
     if (dietFilter && !(it.dietary ?? []).includes(dietFilter)) return false;
     if (avoidAllergen && (it.allergens ?? []).includes(avoidAllergen)) return false;
     return true;
@@ -696,6 +784,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       if (error) throw error;
       const res = data as { order_id: string; customer_token: string };
       const creds = { id: res.order_id, token: res.customer_token };
+      setPayNotice(false);
       setMyOrder(null); // clear the previous order while the new one loads
       try { localStorage.setItem(`menuqr_order_${restaurant.id}`, JSON.stringify(creds)); } catch { /* ignore */ }
       setMyOrderCreds(creds);
@@ -717,7 +806,9 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           if (res2.ok && out.url) { window.location.href = out.url; return; }
           setOrderError(t.cardStartFailed);
         } catch {
-          setOrderError(t.cardStartFailed);
+          // The status sheet opens over the cart, so the notice must live
+          // IN the sheet or the customer never sees it (Phase 4 QA catch).
+          setPayNotice(true);
         }
       }
     } catch (e) {
@@ -802,11 +893,22 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           <div className="h-32 w-full sm:h-40" style={{ background: `linear-gradient(135deg, ${accent}, #101828)` }} />
         )}
         <div className="absolute right-3 top-3 flex gap-2">
-          <button type="button" onClick={() => setLang((l) => (l === "en" ? "ur" : "en"))}
-            aria-label="Switch language"
-            className="flex h-10 items-center justify-center rounded-full bg-black/35 px-3.5 text-sm font-semibold text-white backdrop-blur">
-            {lang === "en" ? "اردو" : "EN"}
-          </button>
+          {enabledTrLangs.length > 0 ? (
+            <div className="flex overflow-hidden rounded-full bg-black/35 backdrop-blur" role="group" aria-label="Language">
+              {(["en", "ur", ...enabledTrLangs] as Lang[]).map((l) => (
+                <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l}
+                  className={`flex h-10 items-center justify-center px-3 text-sm font-semibold ${lang === l ? "bg-white text-ink" : "text-white"}`}>
+                  {l === "en" ? "EN" : l === "ur" ? "اردو" : TR_LABEL[l as TrLang]}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button type="button" onClick={() => setLang((l) => (l === "en" ? "ur" : "en"))}
+              aria-label="Switch language"
+              className="flex h-10 items-center justify-center rounded-full bg-black/35 px-3.5 text-sm font-semibold text-white backdrop-blur">
+              {lang === "en" ? "اردو" : "EN"}
+            </button>
+          )}
           {themeCfg.dark === null && (
             <button type="button" onClick={() => setDarkPref((d) => !d)} aria-label="Toggle theme"
               className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur">
@@ -880,7 +982,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           <div className="mt-3 space-y-2">
             <div className="no-scrollbar flex gap-2 overflow-x-auto" role="group" aria-label="Dietary filters">
               {DIETARY.map((d) => (
-                <Chip key={d.key} label={dietaryLabel(d.key, lang)} active={dietFilter === d.key} accent={accent} dark={dark}
+                <Chip key={d.key} label={dietaryLabel(d.key, lang === "ur" ? "ur" : "en")} active={dietFilter === d.key} accent={accent} dark={dark}
                   onClick={() => setDietFilter(dietFilter === d.key ? null : d.key)} />
               ))}
             </div>
@@ -905,7 +1007,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
               <Chip label={`★ ${t.featured}`} active={activeCat === "featured"} accent={accent} dark={dark} onClick={() => scrollToCategory("featured")} />
             )}
             {categories.map((c) => (
-              <Chip key={c.id} label={c.name} active={activeCat === c.id} accent={accent} dark={dark} onClick={() => scrollToCategory(c.id)} />
+              <Chip key={c.id} label={catName(c)} active={activeCat === c.id} accent={accent} dark={dark} onClick={() => scrollToCategory(c.id)} />
             ))}
           </div>
         </div>
@@ -935,7 +1037,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} featured onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
-                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} trName={itemName(item)} trDesc={itemDesc(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
                       onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
@@ -947,13 +1049,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
               if (list.length === 0) return null;
               return (
                 <section key={cat.id} id={`cat-${cat.id}`} className="mt-8 scroll-mt-20">
-                  <h2 className="mb-3 font-heading text-lg font-semibold">{cat.name}</h2>
+                  <h2 className="mb-3 font-heading text-lg font-semibold">{catName(cat)}</h2>
                   <div className="space-y-3">
                     {list.map((item) => (
                       <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                         expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                         ordering={ordering} qty={itemQty(item.id)}
-                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
+                        hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} trName={itemName(item)} trDesc={itemDesc(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
                         onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                     ))}
                   </div>
@@ -969,7 +1071,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                     <ItemCard key={item.id} item={item} currency={currency} accent={accent} dark={dark} t={t} lang={lang}
                       expanded={expandedId === item.id} onTap={() => onItemTap(item)}
                       ordering={ordering} qty={itemQty(item.id)}
-                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
+                      hasOptions={(groupsByItem.get(item.id) ?? []).length > 0} popular={popularIds.has(item.id)} effPrice={priceOf(item)} trName={itemName(item)} trDesc={itemDesc(item)} hhPct={hhPctOf(item)} hhLabel={t.happyHour} availableNow={item.is_available && withinWindow(item)} windowLabel={windowLabel(item)}
                       onSimpleQty={(q) => setSimpleQty(item, q)} onOptions={() => openOptions(item)} />
                   ))}
                 </div>
@@ -1008,7 +1110,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
           <button type="button" aria-label="Close" onClick={() => setOptItem(null)} className="absolute inset-0 h-full w-full bg-black/55" />
           <div className={`relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl p-5 sm:rounded-3xl ${dark ? "bg-neutral-900 text-white" : "bg-white text-ink"}`}>
             <div className="mb-1 flex items-center gap-2">
-              <h2 className="flex-1 font-heading text-lg font-semibold">{optItem.name}</h2>
+              <h2 className="flex-1 font-heading text-lg font-semibold">{itemName(optItem)}</h2>
               <button type="button" onClick={() => setOptItem(null)} aria-label="Close"
                 className={`flex h-10 w-10 items-center justify-center rounded-full ${dark ? "bg-neutral-800" : "bg-slate-100"}`}>
                 <X size={19} />
@@ -1228,6 +1330,9 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       <span>{t.total} {myOrder.order_type === "dine_in" && myOrder.table_number ? `· ${t.table} ${myOrder.table_number}` : myOrder.order_type === "takeaway" ? `· ${t.takeaway}` : ""}</span>
                       <span>{formatPrice(Number(myOrder.total_amount), currency)}</span>
                     </div>
+                    {payNotice && myOrder.payment_status !== "paid" && (
+                      <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">{t.cardStartFailed}</p>
+                    )}
                     {myOrder.payment_status === "paid" ? (
                       <p className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-emerald-600"><CheckCircle2 size={16} /> {t.paidByCard}</p>
                     ) : myOrder.payment_status === "pending_card" ? (
@@ -1270,7 +1375,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       {lines.map((l) => (
                         <li key={l.key} className="flex items-center gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">{l.item.name}</p>
+                            <p className="truncate text-sm font-semibold">{itemName(l.item)}</p>
                             {l.options.length > 0 && (
                               <p className={`truncate text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>
                                 {l.options.map((o) => o.option_name).join(", ")}
@@ -1499,16 +1604,19 @@ function Chip({ label, active, accent, dark, onClick }: { label: string; active:
   );
 }
 
-function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions, popular = false, effPrice, hhPct = 0, hhLabel, availableNow, windowLabel }: {
+function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, featured = false, ordering, qty, hasOptions, onSimpleQty, onOptions, popular = false, effPrice, hhPct = 0, hhLabel, availableNow, windowLabel, trName, trDesc }: {
   item: MenuItem; currency: string; accent: string; dark: boolean; t: Record<string, string>; lang: Lang;
   expanded: boolean; onTap: () => void; featured?: boolean;
   ordering: boolean; qty: number; hasOptions: boolean;
   onSimpleQty: (q: number) => void; onOptions: () => void; popular?: boolean;
   effPrice?: number; hhPct?: number; hhLabel?: string; availableNow?: boolean; windowLabel?: string | null;
+  trName?: string; trDesc?: string | null;
 }) {
   const avail = availableNow ?? item.is_available;
   const baseSell = item.discount_price != null && Number(item.discount_price) < Number(item.price) ? Number(item.discount_price) : Number(item.price);
   const sell = effPrice != null ? effPrice : baseSell;
+  const displayName = trName || item.name;
+  const displayDesc = trDesc !== undefined ? trDesc : item.description;
   const hasDiscount = sell < Number(item.price);
   const priceBlock = (
     <div className="flex flex-wrap items-baseline gap-1.5">
@@ -1530,7 +1638,7 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
       {((item.dietary?.length ?? 0) > 0 || item.calories != null) && (
         <div className="flex flex-wrap items-center gap-1">
           {(item.dietary ?? []).map((k) => (
-            <span key={k} className={`rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold ${dark ? "text-emerald-400" : "text-emerald-700"}`}>{dietaryLabel(k, lang)}</span>
+            <span key={k} className={`rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold ${dark ? "text-emerald-400" : "text-emerald-700"}`}>{dietaryLabel(k, lang === "ur" ? "ur" : "en")}</span>
           ))}
           {item.calories != null && <span className={`text-[11px] font-medium ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.calories} kcal</span>}
         </div>
@@ -1567,16 +1675,16 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
   if (featured) {
     return (
       <div onClick={onTap} role="button" tabIndex={0}
-        aria-label={`${item.name}, ${formatPrice(sell, currency)}${avail ? "" : `, ${t.unavailableShort}`}`}
+        aria-label={`${displayName}, ${formatPrice(sell, currency)}${avail ? "" : `, ${t.unavailableShort}`}`}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}
         className={`fade-up cursor-pointer overflow-hidden rounded-2xl text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${avail ? "" : "opacity-60"}`}>
         {item.image_url
           ? // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.image_url} alt={item.name} className="h-28 w-full object-cover" loading="lazy" />
+            <img src={item.image_url} alt={displayName} className="h-28 w-full object-cover" loading="lazy" />
           : <div className="flex h-28 w-full items-center justify-center" style={{ background: `${accent}22` }}><UtensilsCrossed size={26} style={{ color: accent }} /></div>}
         <div className="p-3">
-          <p className="line-clamp-1 text-sm font-semibold">{item.name}</p>
-          {expanded && item.description && <p className={`mt-1 text-xs leading-relaxed ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>}
+          <p className="line-clamp-1 text-sm font-semibold">{displayName}</p>
+          {expanded && displayDesc && <p className={`mt-1 text-xs leading-relaxed ${dark ? "text-neutral-400" : "text-slate-500"}`}>{displayDesc}</p>}
           <div className="mt-1.5">{priceBlock}</div>
           {metaBlock}
           {!avail && <span className="mt-1.5 inline-block rounded-full bg-slate-500/15 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{windowLabel ?? t.unavailableShort}</span>}
@@ -1588,16 +1696,16 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
 
   return (
     <div onClick={onTap} role="button" tabIndex={0}
-      aria-label={`${item.name}, ${formatPrice(sell, currency)}${avail ? "" : `, ${t.unavailable}`}`}
+      aria-label={`${displayName}, ${formatPrice(sell, currency)}${avail ? "" : `, ${t.unavailable}`}`}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}
       className={`fade-up flex w-full cursor-pointer gap-3 rounded-2xl p-3 text-start shadow-card ${dark ? "bg-neutral-900" : "bg-white"} ${avail ? "" : "opacity-60"}`}>
       <div className="min-w-0 flex-1 py-0.5">
         <p className="flex items-center gap-1.5 text-[15px] font-semibold leading-snug">
-          {item.name}
+          {displayName}
           {item.is_featured && <Star size={14} className="shrink-0 fill-amber-400 text-amber-400" />}
         </p>
-        {item.description && (
-          <p className={`mt-1 text-[13px] leading-relaxed ${expanded ? "" : "line-clamp-2"} ${dark ? "text-neutral-400" : "text-slate-500"}`}>{item.description}</p>
+        {displayDesc && (
+          <p className={`mt-1 text-[13px] leading-relaxed ${expanded ? "" : "line-clamp-2"} ${dark ? "text-neutral-400" : "text-slate-500"}`}>{displayDesc}</p>
         )}
         <div className="mt-2">{priceBlock}</div>
         {metaBlock}
@@ -1606,7 +1714,7 @@ function ItemCard({ item, currency, accent, dark, t, lang, expanded, onTap, feat
       </div>
       {item.image_url
         ? // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.image_url} alt={item.name} className="h-[92px] w-[92px] shrink-0 rounded-xl object-cover" loading="lazy" />
+          <img src={item.image_url} alt={displayName} className="h-[92px] w-[92px] shrink-0 rounded-xl object-cover" loading="lazy" />
         : <div className="flex h-[92px] w-[92px] shrink-0 items-center justify-center rounded-xl" style={{ background: `${accent}18` }}><UtensilsCrossed size={24} style={{ color: accent }} /></div>}
     </div>
   );
