@@ -140,6 +140,19 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     then redeploy. Restaurants then connect from Dashboard →
     Orders → Square POS and pick a location; orders get a
     "Send to Square" button. OAuth tokens refresh automatically.
+23. **Then run the Phase 6 migration the same way:**
+    `supabase/migration-phase6.sql` adds reservations +
+    catering_enquiries tables (guest writes only through the
+    validated RPCs), the `place_staff_order` RPC for the Counter
+    (POS) page, and `clone_menu` / `sync_menu_by_name` for
+    multi-location menus. Settings gain `reservations_enabled` /
+    `catering_enabled`; orders gain `order_source` ('customer' |
+    'pos'). Reservations and catering are Pro+ (RPC-enforced);
+    clone/sync require the SOURCE restaurant on Business.
+    Counter-order v1 boundaries: coupons, gift cards, tips and
+    happy-hour schedules do not apply at the till; tax/service do.
+    Reservation reminders are in-page for now — email reminders
+    arrive with the Resend setup (step 16 pattern).
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
