@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import {
   Download, FileImage, FileCode2, Printer, Store, ExternalLink, RefreshCw, Plus, Trash2, Armchair,
-  Palette, Save, Loader2,
+  Palette, Save, Loader2, Globe,
 } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnGhost, btnPrimary, inputCls, labelCls } from "@/components/ui";
@@ -228,6 +228,36 @@ export default function QrPage() {
               New downloads of this code now mark visits as true QR scans in Analytics. Codes you printed
               earlier keep working exactly the same — they are simply counted as link visits.
             </p>
+          </Card>
+
+          {/* ---------- Phase 5: one menu everywhere ---------- */}
+          <Card>
+            <h2 className="flex items-center gap-2 font-heading text-base font-bold text-ink">
+              <Globe size={19} className="text-brand" /> Your menu everywhere
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              The same live menu — prices and availability update everywhere the moment you change them here.
+            </p>
+            <p className={`${labelCls} mt-4`}>Menu link (Google Business Profile, Instagram bio, Facebook)</p>
+            <div className="flex gap-2">
+              <input readOnly value={menuUrlFor(restaurant.slug)} className={inputCls} onFocus={(e) => e.target.select()} />
+              <button type="button" className={btnGhost} onClick={() => navigator.clipboard?.writeText(menuUrlFor(restaurant.slug))}>Copy</button>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              Google: Business Profile → Info → add this as your <b>Menu link</b> (and Website). Instagram/Facebook: paste it as your bio link.
+            </p>
+            <p className={`${labelCls} mt-4`}>Embed on your own website</p>
+            <textarea
+              readOnly
+              rows={3}
+              className={`${inputCls} font-mono text-xs`}
+              value={`<iframe src="${menuUrlFor(restaurant.slug).replace("/menu/", "/embed/")}" style="width:100%;max-width:680px;height:720px;border:0;border-radius:16px" loading="lazy" title="${restaurant.name} menu"></iframe>`}
+              onFocus={(e) => e.target.select()}
+            />
+            <div className="mt-2 flex gap-2">
+              <button type="button" className={btnGhost} onClick={() => navigator.clipboard?.writeText(`<iframe src="${menuUrlFor(restaurant.slug).replace("/menu/", "/embed/")}" style="width:100%;max-width:680px;height:720px;border:0;border-radius:16px" loading="lazy" title="${restaurant.name} menu"></iframe>`)}>Copy embed code</button>
+              <a href={menuUrlFor(restaurant.slug).replace("/menu/", "/embed/")} target="_blank" rel="noreferrer" className={btnGhost}>Preview widget</a>
+            </div>
           </Card>
 
           {/* ---------- QR style ---------- */}
