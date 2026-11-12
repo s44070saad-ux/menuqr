@@ -80,6 +80,12 @@ export interface RestaurantSettings {
   /** Phase 4: restaurant's own Stripe (publishable key is public-safe;
       the secret lives in restaurant_secrets, never in this row). */
   stripe_enabled?: boolean;
+  /** Phase 5: owner-enabled translation languages ('es'|'fr'|'de'|'it'). */
+  menu_languages?: string[];
+  square_enabled?: boolean;
+  square_location_id?: string | null;
+  square_location_name?: string | null;
+  square_merchant_id?: string | null;
   stripe_publishable_key?: string | null;
   stripe_key_last4?: string | null;
   qr_color: string;
@@ -189,6 +195,8 @@ export interface Order {
   /** Phase 4: tip + card-payment state. */
   tip_amount?: number;
   payment_status?: "counter" | "pending_card" | "paid" | "failed" | string;
+  /** Phase 5: set once the order has been pushed into Square POS. */
+  square_order_id?: string | null;
   stripe_session_id?: string | null;
   created_at: string;
   updated_at: string;
