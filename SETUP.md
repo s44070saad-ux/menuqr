@@ -102,6 +102,22 @@ Do **not** skip Step 2 — without the database schema nothing can save data.
     project env vars. Without it, the Customers page's win-back
     composer states that email is not configured — nothing is sent
     or faked.
+18. **Then run the Phase 4 migration the same way:**
+    `supabase/migration-phase4.sql` adds order tips + payment state,
+    the restaurant Stripe settings columns, and the
+    `restaurant_secrets` table (RLS on, no client policies — only
+    the server-side API routes can read restaurant Stripe keys).
+19. **Card payments platform key (required for Stripe):** in the
+    Supabase project → Settings → API, copy the `service_role`
+    secret and set it as `SUPABASE_SERVICE_ROLE_KEY` in the Vercel
+    project env vars (Production + Preview), then redeploy. It is
+    used ONLY by the `/api/stripe/*` server routes and must never
+    appear in client code or the repo.
+    Restaurants then connect their OWN Stripe account from
+    Dashboard → Orders (restricted key with Checkout Sessions:
+    Write; optional webhook to `/api/stripe/webhook` for the
+    `checkout.session.completed` / `checkout.session.expired`
+    events). Velora never touches the money.
 4. Verify: **Storage** should show a bucket named `menu-images` (public).
    If it is missing for any reason, create it manually: Storage → New bucket →
    name `menu-images`, **Public bucket ON** — then re-run the storage policy
