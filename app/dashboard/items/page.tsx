@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Download, FileText, Loader2, Pencil, Plus, Search, SlidersHorizontal, Star, Store, Trash2, Upload } from "lucide-react";
 import DashboardShell from "@/components/DashboardShell";
 import SchedulesCard from "@/components/SchedulesCard";
+import LanguagesCard from "@/components/LanguagesCard";
 import ImageField from "@/components/ImageField";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnGhost, btnPrimary, inputCls, labelCls } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
@@ -357,6 +358,8 @@ export default function MenuItemsPage() {
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); }} />
           </Card>
+
+          <LanguagesCard restaurantId={restaurant.id} itemCount={items.length} />
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-white px-3 py-1.5 font-medium text-slate-700 shadow-card">
