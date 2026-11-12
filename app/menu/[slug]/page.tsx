@@ -67,6 +67,11 @@ const STR: Record<Lang, Record<string, string>> = {
     emailOpt: "Email (optional — receipt & offers)", emailConsent: "Email me offers from this restaurant",
     loyaltyTitle: "Your loyalty stamps", loyaltyReward: "You have a reward waiting! Show this screen at the counter on your next visit.",
     loyaltyProgress: "stamps — {left} more for a reward",
+    tipLabel: "Add a tip", noTip: "None", customTipPh: "Custom",
+    payCounterOpt: "Pay at the counter", payCardOpt: "Pay now by card",
+    paidByCard: "Paid by card", cardPending: "Card payment pending",
+    cardCancelled: "Card payment wasn't completed — your order is placed; please pay at the counter.",
+    cardStartFailed: "Card payment couldn't be started — your order is placed; please pay at the counter.",
     reorderNote: "These items need your choices on the menu:",
     stepReceived: "Received", stepPreparing: "Preparing", stepReady: "Ready",
     readyBy: "Ready by about", readyNow: "Should be ready now — please check at the counter.",
@@ -112,6 +117,11 @@ const STR: Record<Lang, Record<string, string>> = {
     emailOpt: "ای میل (اختیاری — رسید اور آفرز)", emailConsent: "اس ریسٹورنٹ کی آفرز ای میل کریں",
     loyaltyTitle: "آپ کے لائلٹی سٹیمپ", loyaltyReward: "آپ کا انعام منتظر ہے! اگلی بار کاؤنٹر پر یہ اسکرین دکھائیں۔",
     loyaltyProgress: "سٹیمپ — انعام کے لیے مزید {left} درکار",
+    tipLabel: "ٹپ شامل کریں", noTip: "نہیں", customTipPh: "اپنی مرضی",
+    payCounterOpt: "کاؤنٹر پر ادائیگی", payCardOpt: "ابھی کارڈ سے ادائیگی",
+    paidByCard: "کارڈ سے ادا ہو گیا", cardPending: "کارڈ ادائیگی زیر التوا ہے",
+    cardCancelled: "کارڈ ادائیگی مکمل نہیں ہوئی — آپ کا آرڈر لگ گیا ہے؛ براہ کرم کاؤنٹر پر ادائیگی کریں۔",
+    cardStartFailed: "کارڈ ادائیگی شروع نہیں ہو سکی — آپ کا آرڈر لگ گیا ہے؛ براہ کرم کاؤنٹر پر ادائیگی کریں۔",
     reorderNote: "ان اشیاء کے لیے مینیو پر انتخاب درکار ہے:",
     stepReceived: "موصول ہو گیا", stepPreparing: "تیار ہو رہا ہے", stepReady: "تیار ہے",
     readyBy: "تقریباً اس وقت تک تیار ہوگا", readyNow: "اب تیار ہونا چاہیے — براہ کرم کاؤنٹر پر معلوم کریں۔",
@@ -208,6 +218,13 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const [giftApplied, setGiftApplied] = useState<{ code: string; credit: number } | null>(null);
   const [discountBusy, setDiscountBusy] = useState(false);
   const [discountMsg, setDiscountMsg] = useState<string | null>(null);
+  // Phase 4: pay-by-card (restaurant's own Stripe) + tip state.
+  const [payMethod, setPayMethod] = useState<"counter" | "card">("counter");
+  const [tipMode, setTipMode] = useState<"none" | "5" | "10" | "15" | "custom">("none");
+  const [customTip, setCustomTip] = useState("");
+  const [payReturn] = useState<string | null>(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("payment") : null);
+  const confirmFired = useRef(false);
   const [note, setNote] = useState("");
   const [placing, setPlacing] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -401,6 +418,22 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
     return () => clearInterval(tmr);
   }, [myOrderCreds, refreshMyOrder]);
 
+  // Phase 4: returning from Stripe Checkout (?payment=success) —
+  // open the tracking view and reconcile the payment with Stripe
+  // server-side (the webhook may beat us to it; both are idempotent).
+  useEffect(() => {
+    if (!payReturn || !myOrderCreds || confirmFired.current) return;
+    confirmFired.current = true;
+    setSheetOpen(true);
+    if (payReturn === "success") {
+      fetch("/api/stripe/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: myOrderCreds.id, token: myOrderCreds.token }),
+      }).then(() => refreshMyOrder()).catch(() => { /* polling reconciles */ });
+    }
+  }, [payReturn, myOrderCreds, refreshMyOrder]);
+
   // ---------- Theme -------------------------------------------------
   const themeName = planSlug === "free" ? "classic" : (settings?.menu_theme ?? "classic");
   const planAllowsUpsell = planSlug === "pro" || planSlug === "business";
@@ -457,7 +490,12 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
   const taxAmt = Math.round(discountedTotal * taxPct) / 100;
   const svcAmt = Math.round(discountedTotal * svcPct) / 100;
   const giftCredit = giftApplied ? Math.min(giftApplied.credit, discountedTotal + taxAmt + svcAmt) : 0;
-  const grandTotal = Math.max(0, discountedTotal + taxAmt + svcAmt - giftCredit);
+  // Phase 4: tip on the discounted items subtotal; the server validates
+  // it against the bill and adds it after gift-card payment.
+  const tipAmt = tipMode === "custom"
+    ? Math.max(0, parseFloat(customTip) || 0)
+    : Math.round(discountedTotal * (tipMode === "none" ? 0 : parseInt(tipMode, 10))) / 100;
+  const grandTotal = Math.max(0, discountedTotal + taxAmt + svcAmt - giftCredit) + tipAmt;
   const belowMin = minOrder > 0 && lines.length > 0 && cartTotal < minOrder;
   const minOrderText = t.minOrderMsg
     .replace("{min}", formatPrice(minOrder, restaurant?.currency ?? "PKR"))
@@ -648,6 +686,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
         p_gift_card_code: giftApplied?.code ?? (giftInput.trim() ? giftInput.trim().toUpperCase() : null),
         p_customer_email: orderType === "takeaway" && custEmail.includes("@") ? custEmail.trim() : null,
         p_email_consent: emailConsent,
+        p_tip_amount: Math.round(tipAmt * 100) / 100,
         p_items: lines.map((l) => ({
           menu_item_id: l.item.id, quantity: l.qty,
           option_ids: l.options.map((o) => o.id),
@@ -665,6 +704,22 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       setCouponApplied(null);
       setGiftApplied(null);
       setDiscountMsg(null);
+      // Phase 4: pay-by-card — hand off to the restaurant's own Stripe
+      // Checkout. If it can't start, the order stands as pay-at-counter.
+      if (payMethod === "card" && settings?.stripe_enabled) {
+        try {
+          const res2 = await fetch("/api/stripe/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order_id: creds.id, token: creds.token, slug }),
+          });
+          const out = (await res2.json().catch(() => ({}))) as { url?: string };
+          if (res2.ok && out.url) { window.location.href = out.url; return; }
+          setOrderError(t.cardStartFailed);
+        } catch {
+          setOrderError(t.cardStartFailed);
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not place the order.";
       if (msg.includes("ORDERING_NOT_AVAILABLE")) setOrderError("Ordering is not available for this restaurant right now.");
@@ -673,6 +728,7 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
       else if (msg.includes("INVALID_OPTION")) setOrderError("One of the chosen options is no longer available. Please review your cart and try again.");
       else if (msg.includes("TOO_MANY_ORDERS")) setOrderError("Too many orders in a short time. Please wait a few minutes or ask the staff for help.");
       else if (msg.includes("MIN_ORDER")) setOrderError(minOrderText);
+      else if (msg.includes("TIP_INVALID")) setOrderError("That tip amount isn't allowed for this order. Please adjust the tip and try again.");
       else if (msg.includes("COUPON_")) { setCouponApplied(null); setOrderError("That coupon can't be used on this order (it may be expired, below its minimum, used up, or for first orders only). Remove it and try again."); }
       else if (msg.includes("GIFT_CARD_")) { setGiftApplied(null); setOrderError("That gift card can't be used (unknown code or no balance left). Remove it and try again."); }
       else if (msg.includes("TABLE_REQUIRED")) setOrderError("Please enter your table number.");
@@ -1142,13 +1198,14 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         </li>
                       ))}
                     </ul>
-                    {(Number(myOrder.tax_amount ?? 0) > 0 || Number(myOrder.service_amount ?? 0) > 0 || Number(myOrder.discount_amount ?? 0) > 0 || Number(myOrder.gift_card_amount ?? 0) > 0) && myOrder.subtotal_amount != null && (
+                    {(Number(myOrder.tax_amount ?? 0) > 0 || Number(myOrder.service_amount ?? 0) > 0 || Number(myOrder.discount_amount ?? 0) > 0 || Number(myOrder.gift_card_amount ?? 0) > 0 || Number(myOrder.tip_amount ?? 0) > 0) && myOrder.subtotal_amount != null && (
                       <div className={`mt-3 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
                         <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(Number(myOrder.subtotal_amount), currency)}</span></div>
                         {Number(myOrder.discount_amount ?? 0) > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Coupon {myOrder.coupon_code ?? ""}</span><span>−{formatPrice(Number(myOrder.discount_amount), currency)}</span></div>}
                         {Number(myOrder.tax_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tax}</span><span>{formatPrice(Number(myOrder.tax_amount), currency)}</span></div>}
                         {Number(myOrder.service_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.serviceCharge}</span><span>{formatPrice(Number(myOrder.service_amount), currency)}</span></div>}
                         {Number(myOrder.gift_card_amount ?? 0) > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Gift card</span><span>−{formatPrice(Number(myOrder.gift_card_amount), currency)}</span></div>}
+                        {Number(myOrder.tip_amount ?? 0) > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tipLabel}</span><span>{formatPrice(Number(myOrder.tip_amount), currency)}</span></div>}
                       </div>
                     )}
                     {myOrder.loyalty && (
@@ -1171,7 +1228,16 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       <span>{t.total} {myOrder.order_type === "dine_in" && myOrder.table_number ? `· ${t.table} ${myOrder.table_number}` : myOrder.order_type === "takeaway" ? `· ${t.takeaway}` : ""}</span>
                       <span>{formatPrice(Number(myOrder.total_amount), currency)}</span>
                     </div>
-                    <p className={`mt-3 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payCounter}</p>
+                    {myOrder.payment_status === "paid" ? (
+                      <p className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-emerald-600"><CheckCircle2 size={16} /> {t.paidByCard}</p>
+                    ) : myOrder.payment_status === "pending_card" ? (
+                      <p className="mt-3 text-sm font-medium text-amber-600">{t.cardPending}</p>
+                    ) : (
+                      <p className={`mt-3 text-xs ${dark ? "text-neutral-500" : "text-slate-400"}`}>{t.payCounter}</p>
+                    )}
+                    {payReturn === "cancelled" && myOrder.payment_status !== "paid" && (
+                      <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">{t.cardCancelled}</p>
+                    )}
                     {waNumber && (myOrder.status === "pending" || myOrder.status === "confirmed") && (
                       <a href={`https://wa.me/${waNumber}?text=${waOrderText}`} target="_blank" rel="noreferrer"
                         className="mt-4 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 font-semibold text-white">
@@ -1260,13 +1326,14 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                       {discountMsg && <p className={`text-xs ${(couponApplied || giftApplied) ? "text-emerald-600" : dark ? "text-neutral-400" : "text-slate-500"}`}>{discountMsg}</p>}
                     </div>
 
-                    {(taxAmt > 0 || svcAmt > 0 || couponDiscount > 0 || giftCredit > 0) ? (
+                    {(taxAmt > 0 || svcAmt > 0 || couponDiscount > 0 || giftCredit > 0 || tipAmt > 0) ? (
                       <div className={`mt-4 space-y-1.5 border-t pt-3 text-sm ${dark ? "border-neutral-800" : "border-slate-100"}`}>
                         <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.subtotal}</span><span>{formatPrice(cartTotal, currency)}</span></div>
                         {couponDiscount > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Coupon {couponApplied?.code}</span><span>−{formatPrice(couponDiscount, currency)}</span></div>}
                         {taxAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tax} ({taxPct}%)</span><span>{formatPrice(taxAmt, currency)}</span></div>}
                         {svcAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.serviceCharge} ({svcPct}%)</span><span>{formatPrice(svcAmt, currency)}</span></div>}
                         {giftCredit > 0 && <div className="flex items-center justify-between text-emerald-600"><span>Gift card {giftApplied?.code}</span><span>−{formatPrice(giftCredit, currency)}</span></div>}
+                        {tipAmt > 0 && <div className="flex items-center justify-between"><span className={dark ? "text-neutral-400" : "text-slate-500"}>{t.tipLabel}</span><span>{formatPrice(tipAmt, currency)}</span></div>}
                         <div className="flex items-center justify-between pt-1 font-heading text-base font-bold"><span>{t.total}</span><span>{formatPrice(grandTotal, currency)}</span></div>
                       </div>
                     ) : (
@@ -1274,6 +1341,37 @@ export default function PublicMenuPage({ params }: { params: { slug: string } })
                         <span>{t.total}</span><span>{formatPrice(cartTotal, currency)}</span>
                       </div>
                     )}
+
+                    {/* Phase 4: tip + payment method (card only when the
+                        restaurant connected its own Stripe). */}
+                    <div className={`mt-4 border-t pt-3 ${dark ? "border-neutral-800" : "border-slate-100"}`}>
+                      <p className="text-sm font-medium">{t.tipLabel}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(["none", "5", "10", "15", "custom"] as const).map((m) => (
+                          <button key={m} type="button" onClick={() => setTipMode(m)} aria-pressed={tipMode === m}
+                            className={`min-h-[40px] rounded-full px-3.5 py-2 text-sm font-semibold ${tipMode === m ? "text-white" : dark ? "bg-neutral-800 text-neutral-200" : "bg-slate-100 text-slate-700"}`}
+                            style={tipMode === m ? { background: accent } : undefined}>
+                            {m === "none" ? t.noTip : m === "custom" ? t.customTipPh : `${m}%`}
+                          </button>
+                        ))}
+                        {tipMode === "custom" && (
+                          <input value={customTip} onChange={(e) => setCustomTip(e.target.value)} inputMode="decimal" type="number" min="0"
+                            placeholder={currency} aria-label={t.customTipPh}
+                            className={`w-28 rounded-xl border px-3 py-2 text-[16px] ${dark ? "border-neutral-700 bg-neutral-800 text-white" : "border-slate-300 bg-white"}`} />
+                        )}
+                      </div>
+                      {settings?.stripe_enabled && (
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          {(["counter", "card"] as const).map((pm) => (
+                            <button key={pm} type="button" onClick={() => setPayMethod(pm)} aria-pressed={payMethod === pm}
+                              className={`min-h-[44px] rounded-xl px-3 py-2 text-sm font-semibold ${payMethod === pm ? "text-white" : dark ? "bg-neutral-800 text-neutral-200" : "bg-slate-100 text-slate-700"}`}
+                              style={payMethod === pm ? { background: accent } : undefined}>
+                              {pm === "counter" ? t.payCounterOpt : t.payCardOpt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Order type */}
                     <div className={`mt-4 grid grid-cols-2 gap-2 rounded-2xl p-1.5 ${dark ? "bg-neutral-800" : "bg-slate-100"}`}>
