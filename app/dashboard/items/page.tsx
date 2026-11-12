@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Download, FileText, Loader2, Pencil, Plus, Search, 
 import DashboardShell from "@/components/DashboardShell";
 import SchedulesCard from "@/components/SchedulesCard";
 import LanguagesCard from "@/components/LanguagesCard";
+import LocationsCard from "@/components/LocationsCard";
 import ImageField from "@/components/ImageField";
 import { Card, EmptyState, ErrorBox, Loading, SuccessBox, btnGhost, btnPrimary, inputCls, labelCls } from "@/components/ui";
 import { supabase } from "@/lib/supabaseClient";
@@ -360,6 +361,8 @@ export default function MenuItemsPage() {
           </Card>
 
           <LanguagesCard restaurantId={restaurant.id} itemCount={items.length} />
+
+          <LocationsCard restaurantId={restaurant.id} />
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-white px-3 py-1.5 font-medium text-slate-700 shadow-card">
