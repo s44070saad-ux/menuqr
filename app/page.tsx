@@ -44,6 +44,8 @@ const FEATURES = [
   { icon: Flame, title: "Smart upselling", text: "\"Pairs well with\" suggestions, Popular badges and one-tap reorder lift every order — and your dashboard shows exactly how much extra revenue upselling made you." },
   { icon: TicketPercent, title: "Coupons, gift cards & loyalty", text: "Discount codes with real rules, prepaid gift cards, and a stamp-card loyalty programme your guests see filling up on their order-tracking page." },
   { icon: Users, title: "Your customer database", text: "Every order builds your own customer list — names, phones, consented emails, spend history — exportable any time, plus win-back emails for guests who go quiet." },
+  { icon: Languages, title: "Menus in 5 languages", text: "English and Urdu built in, plus Spanish, French, German and Italian auto-translated from your own menu text and cached forever. Your guest's phone language is detected automatically." },
+  { icon: Globe, title: "One menu everywhere", text: "The same live menu on your tables (QR), your website (embeddable widget), your Google profile and your social bios. Change a price once — it updates everywhere." },
 ];
 
 const STEPS = [
@@ -62,6 +64,8 @@ const COMPARE: { label: string; velora: string; qlinko: string; win?: boolean }[
   { label: "Analytics", velora: "Real scans & orders from your restaurant", qlinko: "Dashboard demo figures", win: true },
   { label: "Happy-hour pricing & time-based menus", velora: "Yes — scheduled % off, enforced by the server", qlinko: "Not available", win: true },
   { label: "Coupons, gift cards & loyalty stamps", velora: "Yes (Pro)", qlinko: "Not available", win: true },
+  { label: "Menu auto-translated (ES/FR/DE/IT)", velora: "Yes", qlinko: "Not available", win: true },
+  { label: "Embeddable website menu widget", velora: "Yes", qlinko: "Not available", win: true },
   { label: "Customer database you own & can export", velora: "Yes — built automatically from orders", qlinko: "Not available", win: true },
   { label: "Kitchen display (KDS)", velora: "Yes (Pro)", qlinko: "Yes (Professional)" },
   { label: "Urdu menus", velora: "Yes", qlinko: "Yes" },
