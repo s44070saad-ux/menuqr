@@ -83,6 +83,9 @@ export interface RestaurantSettings {
   /** Phase 5: owner-enabled translation languages ('es'|'fr'|'de'|'it'). */
   menu_languages?: string[];
   square_enabled?: boolean;
+  /** Phase 6 feature switches (owner-enabled, plan-gated in the RPCs). */
+  reservations_enabled?: boolean;
+  catering_enabled?: boolean;
   square_location_id?: string | null;
   square_location_name?: string | null;
   square_merchant_id?: string | null;
@@ -197,10 +200,42 @@ export interface Order {
   payment_status?: "counter" | "pending_card" | "paid" | "failed" | string;
   /** Phase 5: set once the order has been pushed into Square POS. */
   square_order_id?: string | null;
+  /** Phase 6: 'customer' (public menu) or 'pos' (staff counter). */
+  order_source?: "customer" | "pos" | string;
   stripe_session_id?: string | null;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
+}
+
+/** Phase 6 — table reservations (public booking form → owner-managed). */
+export interface Reservation {
+  id: string;
+  restaurant_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string | null;
+  party_size: number;
+  reserve_date: string;
+  reserve_time: string;
+  note?: string | null;
+  status: "pending" | "confirmed" | "waitlisted" | "cancelled" | "completed" | "no_show" | string;
+  created_at: string;
+}
+
+/** Phase 6 — catering / group-order enquiries. */
+export interface CateringEnquiry {
+  id: string;
+  restaurant_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string | null;
+  event_date?: string | null;
+  guests?: number | null;
+  budget_amount?: number | null;
+  message?: string | null;
+  status: "new" | "contacted" | "closed" | string;
+  created_at: string;
 }
 
 export interface OrderItem {
