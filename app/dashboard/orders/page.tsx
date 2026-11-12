@@ -428,6 +428,7 @@ function OrderCard({ order: o, currency, busy, onStatus, onPrint, squareOn, squa
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
         <span className="font-heading text-base font-bold text-ink">{formatPrice(Number(o.total_amount), currency)}</span>
+        {o.order_source === "pos" && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-700">COUNTER · POS</span>}
         {Number(o.tip_amount ?? 0) > 0 && <span className="text-xs text-slate-400">incl. tip {formatPrice(Number(o.tip_amount), currency)}</span>}
         {o.payment_status === "paid" ? (
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">PAID · CARD</span>
