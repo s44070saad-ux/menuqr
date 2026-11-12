@@ -100,10 +100,24 @@ export async function POST(req: NextRequest) {
   const [{ data: items }, { data: cats }, { data: itemTr }, { data: catTr }] = await Promise.all([
     db.from("menu_items").select("id,name,description").eq("restaurant_id", restaurantId),
     db.from("categories").select("id,name").eq("restaurant_id", restaurantId),
-    db.from("menu_item_translations").select("item_id").eq("lang", lang),
+    db.from("menu_item_translations").select("item_id,name,description").eq("lang", lang),
     db.from("category_translations").select("category_id").eq("lang", lang),
   ]);
-  const doneItems = new Set((itemTr ?? []).map((r) => (r as { item_id: string }).item_id));
+  // An item counts as done only when its description is translated
+  // too (when it has one) — a name-only row must stay in the queue.
+  const itemDescDone = new Map((itemTr ?? []).map((r) => {
+    const row = r as { item_id: string; description: string | null };
+    return [row.item_id, row.description] as const;
+  }));
+  const itemNameDone = new Map((itemTr ?? []).map((r) => {
+    const row = r as { item_id: string; name: string };
+    return [row.item_id, row.name] as const;
+  }));
+  const doneItems = new Set(
+    ((items as { id: string; description: string | null }[] | null) ?? [])
+      .filter((i) => itemDescDone.has(i.id) && (!i.description || itemDescDone.get(i.id)))
+      .map((i) => i.id),
+  );
   const doneCats = new Set((catTr ?? []).map((r) => (r as { category_id: string }).category_id));
 
   interface Job { kind: "item" | "category"; id: string; name: string; description: string | null }
@@ -122,9 +136,17 @@ export async function POST(req: NextRequest) {
   let quotaHit = false;
   for (const job of jobs) {
     if (stringsUsed >= MAX_STRINGS) break;
-    const name = await translateOne(job.name, lang);
-    if (name === null) { quotaHit = true; break; }
-    stringsUsed += 1;
+    // Reuse an existing translated name (it may be a manual
+    // correction) — only the missing description needs the API.
+    const existingName = job.kind === "item" ? itemNameDone.get(job.id) : undefined;
+    let name: string | null;
+    if (existingName) {
+      name = existingName;
+    } else {
+      name = await translateOne(job.name, lang);
+      if (name === null) { quotaHit = true; break; }
+      stringsUsed += 1;
+    }
     let description: string | null = null;
     if (job.kind === "item" && job.description && stringsUsed < MAX_STRINGS) {
       description = await translateOne(job.description, lang);
