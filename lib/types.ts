@@ -77,6 +77,11 @@ export interface RestaurantSettings {
   /** Phase 3: loyalty stamps (completed orders per target = reward). */
   loyalty_enabled?: boolean;
   loyalty_buy_x?: number;
+  /** Phase 4: restaurant's own Stripe (publishable key is public-safe;
+      the secret lives in restaurant_secrets, never in this row). */
+  stripe_enabled?: boolean;
+  stripe_publishable_key?: string | null;
+  stripe_key_last4?: string | null;
   qr_color: string;
   card_style: "classic" | "dark" | "accent" | string;
   created_at: string;
@@ -181,6 +186,10 @@ export interface Order {
   discount_amount?: number;
   coupon_code?: string | null;
   gift_card_amount?: number;
+  /** Phase 4: tip + card-payment state. */
+  tip_amount?: number;
+  payment_status?: "counter" | "pending_card" | "paid" | "failed" | string;
+  stripe_session_id?: string | null;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
@@ -258,6 +267,8 @@ export interface CustomerOrder {
   discount_amount?: number;
   coupon_code?: string | null;
   gift_card_amount?: number;
+  tip_amount?: number;
+  payment_status?: string;
   /** Present only when loyalty is enabled for the restaurant. */
   loyalty?: { stamps: number; cycle: number; buy_x: number; reward_ready: boolean } | null;
   created_at: string;
